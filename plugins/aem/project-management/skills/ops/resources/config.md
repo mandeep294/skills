@@ -11,20 +11,21 @@ Shared configuration loading and setup for all ops operations.
 ## Load Configuration
 
 ```bash
-CONFIG=$(cat .claude-plugin/project-config.json 2>/dev/null)
-ORG=$(echo "$CONFIG" | grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"org"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-AUTH_TOKEN=$(echo "$CONFIG" | grep -o '"authToken"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"authToken"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-SITE=$(echo "$CONFIG" | grep -o '"site"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"site"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-REF=$(echo "$CONFIG" | grep -o '"ref"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"ref"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-CODE_OWNER=$(echo "$CONFIG" | grep -o '"codeOwner"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"codeOwner"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-CODE_REPO=$(echo "$CONFIG" | grep -o '"codeRepo"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"codeRepo"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-
-REF=${REF:-main}
+eval $(cat .claude-plugin/project-config.json 2>/dev/null | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  const c = JSON.parse(d);
+  console.log('ORG=' + JSON.stringify(c.org || ''));
+  console.log('IMS_TOKEN=' + JSON.stringify(c.imsToken || ''));
+  console.log('SITE=' + JSON.stringify(c.site || ''));
+  console.log('REF=' + JSON.stringify(c.ref || 'main'));
+  console.log('CODE_OWNER=' + JSON.stringify(c.codeOwner || ''));
+  console.log('CODE_REPO=' + JSON.stringify(c.codeRepo || ''));
+")
 
 echo "org=$ORG"
 echo "site=$SITE"
 echo "ref=$REF"
-echo "auth=${AUTH_TOKEN:+set}"
+echo "auth=${IMS_TOKEN:+set}"
 echo "codeOwner=$CODE_OWNER"
 echo "codeRepo=$CODE_REPO"
 ```
@@ -45,7 +46,7 @@ echo '{"org": "{ORG_NAME}"}' > .claude-plugin/project-config.json
 
 ### Authentication
 
-If `AUTH_TOKEN` is empty:
+If `IMS_TOKEN` is empty:
 
 ```
 Skill({ skill: "project-management:auth" })
@@ -54,10 +55,17 @@ Skill({ skill: "project-management:auth" })
 ### Site Detection
 
 ```bash
-ORG=$(cat .claude-plugin/project-config.json | grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"org"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+ORG=$(cat .claude-plugin/project-config.json | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  console.log(JSON.parse(d).org || '');
+")
 
 SITES_JSON=$(curl -s --connect-timeout 15 --max-time 120 "https://admin.hlx.page/config/${ORG}/sites.json")
-SITE_NAMES=$(echo "$SITES_JSON" | grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"name"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+SITE_NAMES=$(echo "$SITES_JSON" | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  const sites = JSON.parse(d).sites || [];
+  sites.forEach(s => console.log(s.name));
+")
 SITE_COUNT=$(echo "$SITE_NAMES" | wc -l | tr -d ' ')
 
 echo "Found $SITE_COUNT site(s):"
@@ -70,13 +78,21 @@ echo "$SITE_NAMES"
 ### Code Repository (For Code Sync)
 
 ```bash
-AUTH_TOKEN=$(cat .claude-plugin/project-config.json | grep -o '"authToken"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"authToken"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-ORG=$(cat .claude-plugin/project-config.json | grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"org"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-SITE=$(cat .claude-plugin/project-config.json | grep -o '"site"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"site"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+eval $(cat .claude-plugin/project-config.json | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  const c = JSON.parse(d);
+  console.log('IMS_TOKEN=' + JSON.stringify(c.imsToken || ''));
+  console.log('ORG=' + JSON.stringify(c.org || ''));
+  console.log('SITE=' + JSON.stringify(c.site || ''));
+")
 
-SITE_CONFIG=$(curl -s --connect-timeout 15 --max-time 120 -H "x-auth-token: ${AUTH_TOKEN}" "https://admin.hlx.page/config/${ORG}/sites/${SITE}.json")
-CODE_OWNER=$(echo "$SITE_CONFIG" | grep -o '"owner"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/"owner"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-CODE_REPO=$(echo "$SITE_CONFIG" | grep -o '"repo"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/"repo"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+SITE_CONFIG=$(curl -s --connect-timeout 15 --max-time 120 -H "Authorization: Bearer ${IMS_TOKEN}" "https://admin.hlx.page/config/${ORG}/sites/${SITE}.json")
+eval $(echo "$SITE_CONFIG" | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  const c = JSON.parse(d);
+  console.log('CODE_OWNER=' + JSON.stringify(c.code?.owner || ''));
+  console.log('CODE_REPO=' + JSON.stringify(c.code?.repo || ''));
+")
 
 # Update config file with code owner/repo
 # Agent should use Edit tool to update .claude-plugin/project-config.json with codeOwner and codeRepo values
@@ -86,34 +102,31 @@ CODE_REPO=$(echo "$SITE_CONFIG" | grep -o '"repo"[[:space:]]*:[[:space:]]*"[^"]*
 
 Identity comes from `/profile`. Roles on the current site are read from `/config/{org}/sites/{site}.json` under `access.admin.role` (a map of role name → list of user emails), not from a separate `/access.json` endpoint.
 
-Use `python3` to parse JSON so nested structures are handled correctly (shell `grep` on JSON is unreliable):
+Use `node` to parse JSON so nested structures are handled correctly:
 
 ```bash
-PROFILE=$(curl -s --connect-timeout 15 --max-time 120 -H "x-auth-token: ${AUTH_TOKEN}" "https://admin.hlx.page/profile")
-USER_EMAIL=$(echo "$PROFILE" | grep -o '"email"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"email"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+PROFILE=$(curl -s --connect-timeout 15 --max-time 120 -H "Authorization: Bearer ${IMS_TOKEN}" "https://admin.hlx.page/profile")
+USER_EMAIL=$(echo "$PROFILE" | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  console.log(JSON.parse(d).profile?.email || '');
+")
 
-SITE_CONFIG=$(curl -s --connect-timeout 15 --max-time 120 -H "x-auth-token: ${AUTH_TOKEN}" "https://admin.hlx.page/config/${ORG}/sites/${SITE}.json")
+SITE_CONFIG=$(curl -s --connect-timeout 15 --max-time 120 -H "Authorization: Bearer ${IMS_TOKEN}" "https://admin.hlx.page/config/${ORG}/sites/${SITE}.json")
 
-export USER_EMAIL
-ROLES_ON_SITE=$(echo "$SITE_CONFIG" | python3 -c '
-import json, os, sys
-try:
-    email = os.environ.get("USER_EMAIL", "")
-    data = json.load(sys.stdin)
-    block = data.get("access", {}).get("admin", {}).get("role", {})
-    if not isinstance(block, dict):
-        print("")
-        sys.exit(0)
-    matched = []
-    for name, value in block.items():
-        if isinstance(value, list) and email in value:
-            matched.append(name)
-        elif value == email:
-            matched.append(name)
-    print(" ".join(matched))
-except Exception:
-    print("")
-')
+ROLES_ON_SITE=$(echo "$SITE_CONFIG" | USER_EMAIL="$USER_EMAIL" node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  const email = process.env.USER_EMAIL || '';
+  try {
+    const data = JSON.parse(d);
+    const block = data.access?.admin?.role || {};
+    const matched = [];
+    for (const [name, value] of Object.entries(block)) {
+      if (Array.isArray(value) && value.includes(email)) matched.push(name);
+      else if (value === email) matched.push(name);
+    }
+    console.log(matched.join(' '));
+  } catch(e) { console.log(''); }
+")
 
 IS_ADMIN=false
 IS_AUTHOR=false
@@ -132,7 +145,7 @@ echo "User: $USER_EMAIL | roles on site: ${ROLES_ON_SITE:-—} | IS_ADMIN=$IS_AD
 ```json
 {
   "org": "myorg",
-  "authToken": "...",
+  "imsToken": "...",
   "site": "site-a",
   "sites": ["site-a", "site-b"],
   "isRepoless": true,

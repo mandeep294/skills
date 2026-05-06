@@ -22,7 +22,7 @@ Manage access tokens for Edge Delivery Services sites.
 ### List Tokens
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/tokens.json"
 ```
 
@@ -31,7 +31,7 @@ curl -s --connect-timeout 15 --max-time 120 \
 ### Create Token
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"name": "Preview Token", "scopes": ["preview"]}' \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/tokens.json"
@@ -44,7 +44,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 ### Get Token
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/tokens/${TOKEN_ID}.json"
 ```
 
@@ -55,7 +55,7 @@ Confirm: "This will revoke token '{tokenId}'. Any systems using this token will 
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/tokens/${TOKEN_ID}.json"
 ```
 

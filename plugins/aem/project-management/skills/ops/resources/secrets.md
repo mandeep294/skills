@@ -33,7 +33,7 @@ Manage secrets for Edge Delivery Services at organization and site levels.
 ### List Organization Secrets
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/secrets.json"
 ```
 
@@ -45,7 +45,7 @@ The API accepts either a `hashedSecretConfig` (server-generates the value) or `k
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"description": "My API secret"}' \
   "https://admin.hlx.page/config/${ORG}/secrets.json"
@@ -56,7 +56,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 ### Read Organization Secret
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/secrets/${SECRET_ID}.json"
 ```
 
@@ -70,7 +70,7 @@ Before executing, you MUST:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/secrets/${SECRET_ID}.json"
 ```
 
@@ -79,7 +79,7 @@ curl -s --connect-timeout 15 --max-time 120 -X DELETE \
 ### List Site Secrets
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/secrets.json"
 ```
 
@@ -89,7 +89,7 @@ curl -s --connect-timeout 15 --max-time 120 \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"description": "My site secret"}' \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/secrets.json"
@@ -100,7 +100,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 ### Read Site Secret
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/secrets/${SECRET_ID}.json"
 ```
 
@@ -114,7 +114,7 @@ Before executing, you MUST:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/secrets/${SECRET_ID}.json"
 ```
 

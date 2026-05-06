@@ -25,7 +25,7 @@ Manage sitemap configuration (`sitemap.yaml`) that defines sitemap generation ru
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/content/sitemap.yaml"
 ```
 
@@ -43,7 +43,7 @@ sitemaps:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: text/yaml" \
   --data-binary @sitemap.yaml \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/content/sitemap.yaml"
@@ -57,7 +57,7 @@ Use PUT to create a new sitemap config. Returns 201 on success; returns 409 if a
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X PUT \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: text/yaml" \
   --data-binary @sitemap.yaml \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/content/sitemap.yaml"
@@ -75,7 +75,7 @@ Before executing, you MUST:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/content/sitemap.yaml"
 ```
 

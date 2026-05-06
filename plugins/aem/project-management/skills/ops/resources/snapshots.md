@@ -32,7 +32,7 @@ Bundle multiple content changes for coordinated publishing.
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main"
 ```
 
@@ -44,7 +44,7 @@ Creates a new snapshot or updates metadata on an existing one. Also used to lock
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"title": "Q2 Launch", "description": "Product pages for Q2 release"}' \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main/${SNAPSHOT_ID}"
@@ -56,7 +56,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main/${SNAPSHOT_ID}"
 ```
 
@@ -64,7 +64,7 @@ curl -s --connect-timeout 15 --max-time 120 \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main/${SNAPSHOT_ID}${PATH}"
 ```
 
@@ -74,7 +74,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"paths": ["/products/new-widget", "/products/new-gadget", "/blog/announcement"]}' \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main/${SNAPSHOT_ID}/*"
@@ -84,7 +84,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main/${SNAPSHOT_ID}${PATH}"
 ```
 
@@ -101,7 +101,7 @@ Before executing, you MUST:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main/${SNAPSHOT_ID}"
 ```
 
@@ -109,7 +109,7 @@ curl -s --connect-timeout 15 --max-time 120 -X DELETE \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main/${SNAPSHOT_ID}${PATH}?publish=true"
 ```
 
@@ -117,7 +117,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main/${SNAPSHOT_ID}?publish=true"
 ```
 
@@ -129,7 +129,7 @@ Locks the snapshot for review. Requires `preview:write` permission → `author`,
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main/${SNAPSHOT_ID}?review=request"
 ```
 
@@ -141,7 +141,7 @@ Publishes all resources, clears the snapshot, and unlocks it. Requires `live:wri
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main/${SNAPSHOT_ID}?review=approve"
 ```
 
@@ -153,7 +153,7 @@ Unlocks the snapshot without publishing. Requires `live:write` permission → `p
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/snapshot/${ORG}/${SITE}/main/${SNAPSHOT_ID}?review=reject"
 ```
 

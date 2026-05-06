@@ -57,7 +57,7 @@ Roles are assigned in the `access.admin.role` section of the site config:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{
     "access": {
@@ -81,7 +81,7 @@ Wildcard patterns are supported: `"*@example.com"` gives all users in that domai
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/${SITE}/access.json"
 ```
 
@@ -90,7 +90,7 @@ curl -s --connect-timeout 15 --max-time 120 \
 ### Add Admin
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"users": ["user@example.com"]}' \
   "https://admin.hlx.page/config/${ORG}/${SITE}/access/admin.json"
@@ -101,7 +101,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 ### Add Author
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"users": ["user@example.com"]}' \
   "https://admin.hlx.page/config/${ORG}/${SITE}/access/author.json"
@@ -119,7 +119,7 @@ Before executing, you MUST:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/${SITE}/access/${ROLE}/${EMAIL}.json"
 ```
 
@@ -129,7 +129,7 @@ curl -s --connect-timeout 15 --max-time 120 -X DELETE \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/profile"
 ```
 
@@ -139,14 +139,14 @@ curl -s --connect-timeout 15 --max-time 120 \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/users.json"
 ```
 
 ### Add Org User
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"email": "user@example.com"}' \
   "https://admin.hlx.page/config/${ORG}/users.json"
@@ -159,7 +159,7 @@ Confirm: "This will remove {userId} from the organization. Proceed? (yes/no)"
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/users/${USER_ID}.json"
 ```
 

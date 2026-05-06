@@ -46,7 +46,7 @@ Preview, publish, unpublish, and status operations for Edge Delivery Services co
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/preview/${ORG}/${SITE}/${REF}${PATH}"
 ```
 
@@ -60,7 +60,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"paths": ["/path1", "/path2"]}' \
   "https://admin.hlx.page/preview/${ORG}/${SITE}/${REF}/*"
@@ -74,7 +74,7 @@ Before executing, confirm with user: "This will delete the preview for {path}. P
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/preview/${ORG}/${SITE}/${REF}${PATH}"
 ```
 
@@ -84,7 +84,7 @@ curl -s --connect-timeout 15 --max-time 120 -X DELETE \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/live/${ORG}/${SITE}/${REF}${PATH}"
 ```
 
@@ -98,7 +98,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"paths": ["/path1", "/path2"]}' \
   "https://admin.hlx.page/live/${ORG}/${SITE}/${REF}/*"
@@ -117,7 +117,7 @@ Before executing, you MUST:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/live/${ORG}/${SITE}/${REF}${PATH}"
 ```
 
@@ -139,7 +139,7 @@ Bulk unpublish uses the same bulk publish endpoint with `"delete": true`:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"delete": true, "paths": ["/old-1", "/old-2", "/old-3"]}' \
   "https://admin.hlx.page/live/${ORG}/${SITE}/${REF}/*"
@@ -149,7 +149,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/status/${ORG}/${SITE}/${REF}${PATH}"
 ```
 
@@ -158,7 +158,7 @@ curl -s --connect-timeout 15 --max-time 120 \
 For explicit paths:
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"paths": ["/page-1", "/page-2"]}' \
   "https://admin.hlx.page/status/${ORG}/${SITE}/${REF}/*"
@@ -167,7 +167,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 For wildcard (all pages under a path) — returns async job:
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"paths": ["/blog/*"]}' \
   "https://admin.hlx.page/status/${ORG}/${SITE}/${REF}/*"
@@ -184,7 +184,7 @@ All operations support feature branches:
 ```bash
 # Preview on feature branch
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/preview/${ORG}/${SITE}/${BRANCH}${PATH}"
 ```
 
@@ -199,13 +199,13 @@ When user says "preview and publish /path", execute both in sequence:
 ```bash
 # Step 1: Preview
 HTTP_CODE=$(curl -s --connect-timeout 15 --max-time 120 -w "%{http_code}" -o /tmp/preview.json -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/preview/${ORG}/${SITE}/${REF}${PATH}")
 
 # Step 2: Publish only if preview succeeded (200/201)
 if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "201" ]; then
   curl -s --connect-timeout 15 --max-time 120 -X POST \
-    -H "x-auth-token: ${AUTH_TOKEN}" \
+    -H "Authorization: Bearer ${IMS_TOKEN}" \
     "https://admin.hlx.page/live/${ORG}/${SITE}/${REF}${PATH}"
   echo "Previewed and published: https://${REF}--${SITE}--${ORG}.aem.live${PATH}"
 else
@@ -225,12 +225,15 @@ PATHS='["/path1", "/path2", "/path3"]'
 
 # Step 1: Bulk preview - get job name from response
 PREVIEW_RESPONSE=$(curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d "{\"paths\": ${PATHS}}" \
   "https://admin.hlx.page/preview/${ORG}/${SITE}/${REF}/*")
 
-JOB_NAME=$(echo "$PREVIEW_RESPONSE" | grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/"name"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+JOB_NAME=$(echo "$PREVIEW_RESPONSE" | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  try { console.log(JSON.parse(d).name || ''); } catch(e) { console.log(''); }
+")
 echo "Preview job started: $JOB_NAME"
 
 # Step 2: Wait for preview job to complete (max 60 attempts, ~5 minutes)
@@ -239,7 +242,7 @@ ATTEMPT=0
 FAILED=0
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
   RESPONSE=$(curl -s --connect-timeout 15 --max-time 120 -w "\n%{http_code}" \
-    -H "x-auth-token: ${AUTH_TOKEN}" \
+    -H "Authorization: Bearer ${IMS_TOKEN}" \
     "https://admin.hlx.page/job/${ORG}/${SITE}/${REF}/preview/${JOB_NAME}")
   HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
   STATUS=$(echo "$RESPONSE" | sed '$d')
@@ -249,8 +252,14 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
     exit 1
   fi
   
-  STATE=$(echo "$STATUS" | grep -o '"state"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"//')
-  FAILED=$(echo "$STATUS" | grep -o '"failed"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
+  eval $(echo "$STATUS" | node -e "
+    const d = require('fs').readFileSync(0,'utf8');
+    try {
+      const j = JSON.parse(d);
+      console.log('STATE=' + JSON.stringify(j.state || ''));
+      console.log('FAILED=' + (j.failed || 0));
+    } catch(e) { console.log('STATE=\"\"'); console.log('FAILED=0'); }
+  ")
   
   [ "$STATE" = "stopped" ] || [ "$STATE" = "completed" ] && break
   ATTEMPT=$((ATTEMPT + 1))
@@ -265,7 +274,7 @@ fi
 # Step 3: Only publish if preview had no failures
 if [ "${FAILED:-0}" -eq 0 ]; then
   curl -s --connect-timeout 15 --max-time 120 -X POST \
-    -H "x-auth-token: ${AUTH_TOKEN}" \
+    -H "Authorization: Bearer ${IMS_TOKEN}" \
     -H "Content-Type: application/json" \
     -d "{\"paths\": ${PATHS}}" \
     "https://admin.hlx.page/live/${ORG}/${SITE}/${REF}/*"

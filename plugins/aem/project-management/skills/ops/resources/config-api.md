@@ -43,14 +43,14 @@ Read and manage organization and site configurations.
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}.json"
 ```
 
 ### Update Organization Config
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"property": "value"}' \
   "https://admin.hlx.page/config/${ORG}.json"
@@ -62,7 +62,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X PUT \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"property": "value"}' \
   "https://admin.hlx.page/config/${ORG}.json"
@@ -78,7 +78,7 @@ Before executing, you MUST:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}.json"
 ```
 
@@ -86,7 +86,7 @@ curl -s --connect-timeout 15 --max-time 120 -X DELETE \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}.json"
 ```
 
@@ -97,7 +97,7 @@ curl -s --connect-timeout 15 --max-time 120 \
 ### Update Site Config
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"property": "value"}' \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}.json"
@@ -109,7 +109,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X PUT \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"property": "value"}' \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}.json"
@@ -125,7 +125,7 @@ Before executing, you MUST:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}.json"
 ```
 
@@ -133,14 +133,14 @@ curl -s --connect-timeout 15 --max-time 120 -X DELETE \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/robots.txt"
 ```
 
 ### Update Robots.txt
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: text/plain" \
   -d 'User-agent: *
 Disallow: /private/

@@ -1,10 +1,10 @@
 ---
 name: ops
-description: Execute AEM Edge Delivery Services admin operations - list admins, add/remove users, preview, publish, unpublish content, clear cache, sync code, reindex, generate sitemap, manage snapshots, view logs, manage jobs, list sites, configure org/site settings, manage secrets and API keys. Use for any Edge Delivery Services administrative task.
+description: Execute AEM Edge Delivery Services admin operations - list admins, add/remove users, preview, publish, unpublish content, clear cache, sync code, reindex, generate sitemap, manage snapshots, view logs, manage jobs, list sites, configure org/site settings, manage secrets and API keys. Also supports Document Authoring (DA) operations via admin.da.live - list/get/put content, copy, move, delete, versioning, and DA-specific preview/publish. Use for any Edge Delivery Services administrative task.
 license: Apache-2.0
 allowed-tools: Read, Write, Edit, Bash, Skill
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # Edge Delivery Services Admin Operations
@@ -34,6 +34,7 @@ Execute admin operations on AEM Edge Delivery Services projects using natural la
 | **Sitemap Config** | show sitemap config, update sitemap config (sitemap.yaml) |
 | **Versioning** | list versions, restore version, rollback config |
 | **Pages** | list pages, list all pages, show indexed pages |
+| **DA (Document Authoring)** | da list, da source /path, da copy, da move, da delete, da config, da versions, da auth |
 
 ---
 
@@ -87,7 +88,10 @@ Analyze user request and load the appropriate resource module.
 **Before ANY operation**, check if org name exists in saved config:
 
 ```bash
-ORG=$(cat .claude-plugin/project-config.json 2>/dev/null | grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"org"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+ORG=$(cat .claude-plugin/project-config.json 2>/dev/null | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  try { console.log(JSON.parse(d).org || ''); } catch(e) { console.log(''); }
+")
 echo "org=${ORG:-NOT SET}"
 ```
 
@@ -111,50 +115,63 @@ echo "org=${ORG:-NOT SET}"
 
 ### Step 1: Authenticate (REQUIRED)
 
-**Before ANY API call**, check if auth token exists:
+**Before ANY API call**, check if IMS token exists:
 
 ```bash
-AUTH_TOKEN=$(cat .claude-plugin/project-config.json 2>/dev/null | grep -o '"authToken"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"authToken"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-echo "auth=${AUTH_TOKEN:+set}"
+IMS_TOKEN=$(cat .claude-plugin/project-config.json 2>/dev/null | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  try { console.log(JSON.parse(d).imsToken || ''); } catch(e) { console.log(''); }
+")
+echo "auth=${IMS_TOKEN:+set}"
 ```
 
-**If `AUTH_TOKEN` is empty or missing**, you MUST invoke the auth skill BEFORE proceeding:
+**If `IMS_TOKEN` is empty**, invoke the auth skill BEFORE proceeding:
 
 ```
 Skill({ skill: "project-management:auth" })
 ```
 
-This opens a browser via Playwright for Adobe ID login and saves the token to `.claude-plugin/project-config.json`.
-
-**IMPORTANT:** Do NOT skip this step. Do NOT attempt any API calls without a valid auth token. The auth skill handles the entire authentication flow.
+**IMPORTANT:** Do NOT skip this step. Do NOT attempt any API calls without a valid token. Use `Authorization: Bearer ${IMS_TOKEN}` header for all API calls.
 
 ### Step 2: Load Full Configuration and Validate Role
 
-After auth is confirmed, load config and verify user role:
+After auth is confirmed, load config:
 
 ```bash
-CONFIG=$(cat .claude-plugin/project-config.json 2>/dev/null)
-ORG=$(echo "$CONFIG" | grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"org"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-AUTH_TOKEN=$(echo "$CONFIG" | grep -o '"authToken"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"authToken"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-SITE=$(echo "$CONFIG" | grep -o '"site"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"site"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-REF=$(echo "$CONFIG" | grep -o '"ref"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"ref"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-USER_ROLE=$(echo "$CONFIG" | grep -o '"userRole"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"userRole"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-
-REF=${REF:-main}
-echo "Config: org=$ORG site=$SITE ref=$REF role=$USER_ROLE auth=${AUTH_TOKEN:+set}"
+CONFIG_JSON=$(cat .claude-plugin/project-config.json 2>/dev/null)
+eval $(echo "$CONFIG_JSON" | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  const c = JSON.parse(d);
+  console.log('ORG=' + JSON.stringify(c.org || ''));
+  console.log('IMS_TOKEN=' + JSON.stringify(c.imsToken || ''));
+  console.log('SITE=' + JSON.stringify(c.site || ''));
+  console.log('REF=' + JSON.stringify(c.ref || 'main'));
+")
+echo "Config: org=$ORG site=$SITE ref=$REF auth=${IMS_TOKEN:+set}"
 ```
 
-**If `USER_ROLE` is empty** (not yet cached), fetch profile to verify auth and record user identity:
+**Fetch profile** to verify auth and record user identity:
 
 ```bash
-PROFILE_RESPONSE=$(curl -s --connect-timeout 15 --max-time 120 -w "\n%{http_code}" -H "x-auth-token: ${AUTH_TOKEN}" \
+PROFILE_RESPONSE=$(curl -s --connect-timeout 15 --max-time 120 -w "\n%{http_code}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/profile")
 HTTP_CODE=$(echo "$PROFILE_RESPONSE" | tail -n1)
 PROFILE=$(echo "$PROFILE_RESPONSE" | sed '$d')
 
 if [ "$HTTP_CODE" = "401" ]; then
-  echo "Auth token expired. Re-authenticate required."
-  # Clear cached token and re-run auth skill
+  echo "Auth token expired. Clearing cached token..."
+  # Remove expired token from config
+  node -e "
+    const fs = require('fs');
+    const p = '.claude-plugin/project-config.json';
+    let c = {};
+    try { c = JSON.parse(fs.readFileSync(p, 'utf8')); } catch(e) {}
+    delete c.imsToken;
+    delete c.imsTokenExpiry;
+    fs.writeFileSync(p, JSON.stringify(c, null, 2));
+  " 2>/dev/null
+  echo "REAUTH_REQUIRED"
   exit 1
 elif [ "$HTTP_CODE" != "200" ]; then
   echo "Failed to fetch profile (HTTP $HTTP_CODE). Check network/API status."
@@ -162,8 +179,14 @@ elif [ "$HTTP_CODE" != "200" ]; then
 fi
 
 # Profile response: {"profile": {"email": "...", "name": "...", "ttl": ...}}
-USER_EMAIL=$(echo "$PROFILE" | grep -o '"email"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"email"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-USER_NAME=$(echo "$PROFILE" | grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"name"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+eval $(echo "$PROFILE" | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  try {
+    const p = JSON.parse(d).profile || {};
+    console.log('USER_EMAIL=' + JSON.stringify(p.email || ''));
+    console.log('USER_NAME=' + JSON.stringify(p.name || ''));
+  } catch(e) { console.log('USER_EMAIL=\"\"'); console.log('USER_NAME=\"\"'); }
+")
 
 echo "Authenticated as: $USER_EMAIL ($USER_NAME)"
 ```
@@ -172,7 +195,8 @@ echo "Authenticated as: $USER_EMAIL ($USER_NAME)"
 
 ```bash
 # Determine user role on the current site
-ACCESS_RESPONSE=$(curl -s --connect-timeout 15 --max-time 120 -H "x-auth-token: ${AUTH_TOKEN}" \
+ACCESS_RESPONSE=$(curl -s --connect-timeout 15 --max-time 120 \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}.json")
 # Check which role(s) the user's email appears in within access.admin.role
 # Roles: admin, author, publish, basic_author, basic_publish, develop, config, config_admin
@@ -216,6 +240,7 @@ Read `resources/config.md` for setup instructions if site or other values are mi
 | sitemap config, helix-sitemap, sitemap rules | `resources/sitemap-config.md` |
 | version, versions, history, rollback, restore | `resources/versioning.md` |
 | pages, list pages, indexed pages, all pages | `resources/pages.md` |
+| da, da list, da source, da copy, da move, da delete, da config, da versions | `resources/da.md` |
 
 ### Step 4: Read Resource and Execute
 
@@ -312,6 +337,12 @@ Read `resources/config.md` for setup instructions if site or other values are mi
 - Keywords: pages, list pages, indexed pages, all pages, show pages
 - Actions: list, show, filter
 
+### Document Authoring (DA)
+- Keywords: da, da list, da source, da content, da files, da copy, da move, da delete, da config, da versions, da auth, da login
+- Prefix: "da " before any action indicates DA admin API (admin.da.live)
+- Actions: list, get, source, copy, move, delete, config, versions, restore, auth, login
+- Note: Requires IMS token authentication (different from admin.hlx.page)
+
 ### Help
 - Triggers: `help`, `what can you do?`, `/ops help`, `/ops what can you do?`, "list commands", "show available commands" — show the **Help Response** block in this file (no resource module).
 
@@ -335,6 +366,7 @@ Read `resources/config.md` for setup instructions if site or other values are mi
 | Delete org/site config | `config-api.md` | CRITICAL - Can break site |
 | Delete secret | `secrets.md` | HIGH - Can break integrations |
 | Revoke API key | `apikeys.md` | HIGH - Can break CI/CD |
+| DA delete | `da.md` | HIGH - Permanently deletes from DA |
 
 ### Confirmation Protocol
 
@@ -495,4 +527,17 @@ Versioning:
 Pages:
   list pages             - Show all indexed pages
   list pages /blog       - Filter by path prefix
+
+Document Authoring (DA):
+  da auth                - Authenticate with DA (IMS OAuth)
+  da list                - List DA organizations
+  da list /path          - List files in DA path
+  da source /path        - Get file content from DA
+  da copy /src to /dest  - Copy file/folder in DA
+  da move /src to /dest  - Move/rename in DA
+  da delete /path        - Delete from DA
+  da config              - View DA site config
+  da versions /path      - List file versions
+  da preview /path       - Preview DA content
+  da publish /path       - Publish DA content
 ```

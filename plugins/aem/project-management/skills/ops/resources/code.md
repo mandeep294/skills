@@ -27,7 +27,7 @@ Use the `/*` wildcard to recursively sync the entire repository tree:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/code/${CODE_OWNER}/${CODE_REPO}/${REF}/*"
 ```
 
@@ -37,7 +37,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/code/${CODE_OWNER}/${CODE_REPO}/${REF}${PATH}"
 ```
 
@@ -46,7 +46,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 Example: Sync just the hero block:
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/code/${CODE_OWNER}/${CODE_REPO}/main/blocks/hero/hero.js"
 ```
 
@@ -54,7 +54,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/code/${CODE_OWNER}/${CODE_REPO}/${REF}${PATH}"
 ```
 
@@ -66,7 +66,7 @@ Confirm: "This will delete {path} from the code bus. In repoless setups, this af
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/code/${CODE_OWNER}/${CODE_REPO}/${REF}${PATH}"
 ```
 
@@ -83,9 +83,15 @@ In a **repoless setup**, multiple sites share one code repository. Code sync aff
 **Before syncing, check if repoless:**
 
 ```bash
-ORG=$(cat .claude-plugin/project-config.json | grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"org"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-SITES=$(curl -s --connect-timeout 15 --max-time 120 "https://admin.hlx.page/config/${ORG}/sites.json")
-SITE_COUNT=$(echo "$SITES" | grep -o '"name"' | wc -l | tr -d ' ')
+ORG=$(cat .claude-plugin/project-config.json | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  console.log(JSON.parse(d).org || '');
+")
+SITES_JSON=$(curl -s --connect-timeout 15 --max-time 120 "https://admin.hlx.page/config/${ORG}/sites.json")
+SITE_COUNT=$(echo "$SITES_JSON" | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  try { console.log((JSON.parse(d).sites || []).length); } catch(e) { console.log(0); }
+")
 
 if [ "$SITE_COUNT" -gt 1 ]; then
   echo "REPOLESS: $SITE_COUNT sites share this codebase"

@@ -33,7 +33,7 @@ Manage API keys for programmatic access to Edge Delivery Services.
 ### List Organization API Keys
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/apiKeys.json"
 ```
 
@@ -42,7 +42,7 @@ curl -s --connect-timeout 15 --max-time 120 \
 ### Create Organization API Key
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"name": "CI/CD Key", "scopes": ["preview", "live"]}' \
   "https://admin.hlx.page/config/${ORG}/apiKeys.json"
@@ -55,7 +55,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 ### Read Organization API Key
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/apiKeys/${KEY_ID}.json"
 ```
 
@@ -69,7 +69,7 @@ Before executing, you MUST:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/apiKeys/${KEY_ID}.json"
 ```
 
@@ -78,7 +78,7 @@ curl -s --connect-timeout 15 --max-time 120 -X DELETE \
 ### List Site API Keys
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/apiKeys.json"
 ```
 
@@ -87,7 +87,7 @@ curl -s --connect-timeout 15 --max-time 120 \
 ### Create Site API Key
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"name": "Site Deploy Key", "scopes": ["preview", "live", "code"]}' \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/apiKeys.json"
@@ -98,7 +98,7 @@ curl -s --connect-timeout 15 --max-time 120 -X POST \
 ### Read Site API Key
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/apiKeys/${KEY_ID}.json"
 ```
 
@@ -112,7 +112,7 @@ Before executing, you MUST:
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites/${SITE}/apiKeys/${KEY_ID}.json"
 ```
 

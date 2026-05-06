@@ -15,3 +15,6 @@ drafts/tmp/
 # Release artifacts
 *.skill
 dist/
+
+# Claude plugin config
+.claude-plugin/

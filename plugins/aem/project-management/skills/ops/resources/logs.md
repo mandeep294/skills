@@ -25,7 +25,7 @@ View and manage audit logs for Edge Delivery Services.
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/log/${ORG}/${SITE}/${REF}"
 ```
 
@@ -36,17 +36,17 @@ curl -s --connect-timeout 15 --max-time 120 \
 ```bash
 # Last hour
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/log/${ORG}/${SITE}/${REF}?since=1h"
 
 # Last 24 hours
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/log/${ORG}/${SITE}/${REF}?since=24h"
 
 # Last 3 days
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/log/${ORG}/${SITE}/${REF}?since=3d"
 ```
 
@@ -54,7 +54,7 @@ curl -s --connect-timeout 15 --max-time 120 \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/log/${ORG}/${SITE}/${REF}?from=2024-01-01T00:00:00Z&to=2024-01-02T00:00:00Z"
 ```
 
@@ -62,7 +62,7 @@ curl -s --connect-timeout 15 --max-time 120 \
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X POST \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   -H "Content-Type: application/json" \
   -d '{"entries": [{"event": "Manual deployment completed"}]}' \
   "https://admin.hlx.page/log/${ORG}/${SITE}/${REF}"
@@ -100,7 +100,7 @@ For large log sets, the response includes a `nextToken` and `links.next` URL. To
 ```bash
 NEXT_TOKEN="ABAB=="  # from previous response
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/log/${ORG}/${SITE}/${REF}?nextToken=${NEXT_TOKEN}"
 ```
 

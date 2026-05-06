@@ -37,17 +37,17 @@ Track and manage bulk operation jobs for Edge Delivery Services.
 ```bash
 # List preview jobs
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/job/${ORG}/${SITE}/${REF}/preview"
 
 # List publish jobs
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/job/${ORG}/${SITE}/${REF}/publish"
 
 # List index jobs
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/job/${ORG}/${SITE}/${REF}/index"
 ```
 
@@ -58,7 +58,7 @@ curl -s --connect-timeout 15 --max-time 120 \
 If topic is known:
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/job/${ORG}/${SITE}/${REF}/${TOPIC}/${JOB_NAME}"
 ```
 
@@ -66,7 +66,7 @@ If topic is unknown, probe all topics:
 ```bash
 for TOPIC in preview publish index preview-remove live-remove index-remove; do
   HTTP=$(curl -s --connect-timeout 15 --max-time 120 -w "%{http_code}" -o /tmp/job.json \
-    -H "x-auth-token: ${AUTH_TOKEN}" \
+    -H "Authorization: Bearer ${IMS_TOKEN}" \
     "https://admin.hlx.page/job/${ORG}/${SITE}/${REF}/${TOPIC}/${JOB_NAME}")
   ([ "$HTTP" = "200" ] || [ "$HTTP" = "202" ]) && cat /tmp/job.json && break
 done
@@ -78,7 +78,7 @@ Returns job progress: total, completed, failed, pending.
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/job/${ORG}/${SITE}/${REF}/${TOPIC}/${JOB_NAME}/details"
 ```
 
@@ -88,7 +88,7 @@ Returns per-path status within the job.
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 -X DELETE \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/job/${ORG}/${SITE}/${REF}/${TOPIC}/${JOB_NAME}"
 ```
 
@@ -118,7 +118,7 @@ MAX_ATTEMPTS=60
 ATTEMPT=0
 while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
   RESPONSE=$(curl -s --connect-timeout 15 --max-time 120 -w "\n%{http_code}" \
-    -H "x-auth-token: ${AUTH_TOKEN}" \
+    -H "Authorization: Bearer ${IMS_TOKEN}" \
     "https://admin.hlx.page/job/${ORG}/${SITE}/${REF}/${TOPIC}/${JOB_NAME}")
   HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
   STATUS=$(echo "$RESPONSE" | sed '$d')
@@ -128,10 +128,19 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
     break
   fi
   
-  PROCESSED=$(echo "$STATUS" | grep -o '"processed"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
-  TOTAL=$(echo "$STATUS" | grep -o '"total"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
-  FAILED=$(echo "$STATUS" | grep -o '"failed"[[:space:]]*:[[:space:]]*[0-9]*' | grep -o '[0-9]*$')
-  STATE=$(echo "$STATUS" | grep -o '"state"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"state"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+  eval $(echo "$STATUS" | node -e "
+    const d = require('fs').readFileSync(0,'utf8');
+    try {
+      const j = JSON.parse(d);
+      console.log('PROCESSED=' + (j.processed || 0));
+      console.log('TOTAL=' + (j.total || 0));
+      console.log('FAILED=' + (j.failed || 0));
+      console.log('STATE=' + JSON.stringify(j.state || ''));
+    } catch(e) {
+      console.log('PROCESSED=0'); console.log('TOTAL=0');
+      console.log('FAILED=0'); console.log('STATE=\"\"');
+    }
+  ")
   
   echo "Progress: ${PROCESSED:-0}/${TOTAL:-?} processed, ${FAILED:-0} failed - State: ${STATE:-unknown}"
   

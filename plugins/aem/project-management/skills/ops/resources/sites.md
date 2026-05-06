@@ -28,7 +28,7 @@ Organization (org)
 
 ```bash
 curl -s --connect-timeout 15 --max-time 120 \
-  -H "x-auth-token: ${AUTH_TOKEN}" \
+  -H "Authorization: Bearer ${IMS_TOKEN}" \
   "https://admin.hlx.page/config/${ORG}/sites.json"
 ```
 
@@ -37,9 +37,15 @@ curl -s --connect-timeout 15 --max-time 120 \
 ### Detect Repoless Setup
 
 ```bash
-ORG=$(cat .claude-plugin/project-config.json | grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"org"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-SITES=$(curl -s --connect-timeout 15 --max-time 120 "https://admin.hlx.page/config/${ORG}/sites.json")
-SITE_COUNT=$(echo "$SITES" | grep -o '"name"' | wc -l | tr -d ' ')
+ORG=$(cat .claude-plugin/project-config.json | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  console.log(JSON.parse(d).org || '');
+")
+SITES_JSON=$(curl -s --connect-timeout 15 --max-time 120 "https://admin.hlx.page/config/${ORG}/sites.json")
+SITE_COUNT=$(echo "$SITES_JSON" | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  try { console.log((JSON.parse(d).sites || []).length); } catch(e) { console.log(0); }
+")
 
 if [ "$SITE_COUNT" -gt 1 ]; then
   echo "REPOLESS: $SITE_COUNT sites share this codebase"
@@ -81,13 +87,19 @@ cat .claude-plugin/project-config.json
 Execute operation across all sites:
 
 ```bash
-ORG=$(cat .claude-plugin/project-config.json | grep -o '"org"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"org"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
-SITES=$(curl -s --connect-timeout 15 --max-time 120 "https://admin.hlx.page/config/${ORG}/sites.json" | grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/"name"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+ORG=$(cat .claude-plugin/project-config.json | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  console.log(JSON.parse(d).org || '');
+")
+SITES=$(curl -s --connect-timeout 15 --max-time 120 "https://admin.hlx.page/config/${ORG}/sites.json" | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  try { (JSON.parse(d).sites || []).forEach(s => console.log(s.name)); } catch(e) {}
+")
 
 for SITE in $SITES; do
   echo "Publishing /about on $SITE..."
   curl -s --connect-timeout 15 --max-time 120 -X POST \
-    -H "x-auth-token: ${AUTH_TOKEN}" \
+    -H "Authorization: Bearer ${IMS_TOKEN}" \
     "https://admin.hlx.page/live/${ORG}/${SITE}/main/about"
 done
 ```
