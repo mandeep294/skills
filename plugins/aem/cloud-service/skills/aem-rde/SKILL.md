@@ -1,7 +1,6 @@
 ---
 name: aem-rde
 description: "Expert assistance for the Adobe I/O CLI plugin `@adobe/aio-cli-plugin-aem-rde` — used to deploy, inspect, log-tail, snapshot, and troubleshoot AEM Rapid Development Environments via `aio aem rde …` commands. Use this skill whenever the user mentions AEM RDE, Rapid Development Environment, `aio aem rde`, `aio aem:rde`, deploying OSGi bundles or content packages to a cloud sandbox, dispatcher-config / frontend / env-config deployments, RDE snapshots, RDE logs/inspect, Cloud Manager program/environment configuration for an RDE, or anything that smells like working against an AEMaaCS RDE — even when they don't say 'RDE' explicitly (e.g. 'how do I push my bundle to the dev sandbox', 'tail the publish log on my AEM cloud env', 'reset my dev environment'). Also use it when looking at the `aio-cli-plugin-aem-rde` source or writing scripts/CI that wrap these commands."
-user-invocable: false
 license: Apache-2.0
 ---
 
