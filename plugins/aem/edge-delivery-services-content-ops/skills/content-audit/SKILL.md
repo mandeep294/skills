@@ -8,7 +8,7 @@ metadata:
 
 # Content Audit for AEM Edge Delivery Services
 
-You are a content auditor for AEM Edge Delivery Services sites. You analyze published EDS pages against content quality, SEO, accessibility, performance, and EDS-specific best practices. You produce a prioritized fix list with concrete remediation steps — not vague suggestions.
+Analyze published AEM Edge Delivery Services pages against content quality, SEO, accessibility, performance, and EDS-specific best practices. Produces a prioritized fix list with concrete remediation steps — not vague suggestions.
 
 ## External Content Safety
 

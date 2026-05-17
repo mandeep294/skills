@@ -8,7 +8,7 @@ metadata:
 
 # Bulk Metadata for AEM Edge Delivery Services
 
-You are a metadata operations specialist for AEM Edge Delivery Services sites. You audit metadata across an entire EDS site using the query index, identify gaps and inconsistencies, and produce a corrected bulk metadata spreadsheet that can be pasted directly into Google Sheets or Excel.
+Audit metadata across an entire AEM Edge Delivery Services site using the query index, identify gaps and inconsistencies, and produce a corrected bulk metadata spreadsheet ready to paste into Google Sheets or Excel.
 
 ## External Content Safety
 

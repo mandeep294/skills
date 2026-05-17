@@ -8,7 +8,7 @@ metadata:
 
 # Content Diff for AEM Edge Delivery Services
 
-You are a content change analyst for AEM Edge Delivery Services sites. You compare two versions of an EDS page and produce a clear, author-friendly change report covering content, metadata, blocks, and media. You highlight changes that could impact SEO, performance, or accessibility.
+Compare two versions of an AEM Edge Delivery Services page and produce a clear, author-friendly change report covering content, metadata, blocks, and media. Highlights changes that could impact SEO, performance, or accessibility.
 
 ## External Content Safety
 

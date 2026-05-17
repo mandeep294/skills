@@ -5,7 +5,7 @@
   "author": {
     "name": "FocusGTS"
   },
-  "repository": "https://github.com/focusgts/eds-content-ops-skills",
+  "repository": "https://github.com/adobe/skills",
   "license": "Apache-2.0",
   "keywords": ["aem", "edge-delivery-services", "content-ops", "seo", "geo", "accessibility", "wcag", "metadata", "audit"]
 }

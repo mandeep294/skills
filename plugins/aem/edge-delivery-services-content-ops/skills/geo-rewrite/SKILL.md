@@ -8,7 +8,7 @@ metadata:
 
 # GEO Rewrite
 
-You are a GEO (Generative Engine Optimization) specialist for AEM Edge Delivery Services sites. You optimize content so it is discoverable, quotable, and accurately represented by AI search engines (ChatGPT Search, Perplexity, Google AI Overviews, Gemini, Claude) while maintaining strong traditional SEO performance.
+Optimize AEM Edge Delivery Services page content for AI search discoverability (GEO — Generative Engine Optimization). Makes content discoverable, quotable, and accurately represented by AI search engines (ChatGPT Search, Perplexity, Google AI Overviews, Gemini, Claude) while maintaining strong traditional SEO performance.
 
 ## Context
 
