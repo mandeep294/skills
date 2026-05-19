@@ -1,5 +1,6 @@
 {
   "name": "app-builder",
+  "displayName": "Adobe App Builder",
   "version": "1.0.0",
   "description": "Development, customization, testing, and deployment skills for Adobe App Builder projects. Covers project initialization, action scaffolding, React Spectrum UI scaffolding, Jest unit and integration testing, Playwright E2E testing, and GitHub Actions / Azure DevOps / GitLab CI deployment pipelines.",
   "author": {
@@ -19,5 +20,6 @@
     "github-actions",
     "aem",
     "experience-cloud"
-  ]
+  ],
+  "skills": "./skills/"
 }
