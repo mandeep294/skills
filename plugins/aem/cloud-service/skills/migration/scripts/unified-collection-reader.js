@@ -8,6 +8,10 @@
 const fs = require('fs');
 const path = require('path');
 
+// Default batch size for paged access to findings. Keep this in sync with
+// the documented batch size in migration/SKILL.md and cam-mcp.md.
+const DEFAULT_BATCH_SIZE = 5;
+
 // Pattern to subtype mapping (matching cam-bpa-fetcher.ts)
 const PATTERN_TO_SUBTYPE = {
   scheduler: "sling.commons.scheduler",
@@ -52,6 +56,7 @@ class BpaResult {
     this.projectId = 'unified-collection';
     this.targets = [];
     this.summary = {};
+    this.message = null;
     this.error = null;
     this.errorDetails = null;
     this.troubleshooting = [];
@@ -64,6 +69,35 @@ class BpaResult {
  */
 function fromMongoSafeFieldName(mongoSafeFieldName) {
   return mongoSafeFieldName ? mongoSafeFieldName.replace(/_/g, '.') : null;
+}
+
+/**
+ * Slice a flat array of findings and return `{ targets, paging }`.
+ *
+ * Caller must produce `items` in a stable, deterministic order so that
+ * incrementing `offset` across calls yields contiguous, non-overlapping batches.
+ * `limit: null` disables batching (returns everything).
+ */
+function paginate(items, { offset = 0, limit = DEFAULT_BATCH_SIZE } = {}) {
+  const list = Array.isArray(items) ? items : [];
+  const total = list.length;
+  const start = Math.max(0, Math.floor(Number(offset)) || 0);
+  const unbounded = limit === null;
+  const size = unbounded ? total : Math.max(1, Math.floor(Number(limit)) || DEFAULT_BATCH_SIZE);
+  const targets = list.slice(start, unbounded ? total : start + size);
+  const reached = start + targets.length;
+  const nextOffset = reached < total ? reached : null;
+  return {
+    targets,
+    paging: {
+      total,
+      returned: targets.length,
+      offset: start,
+      limit: unbounded ? null : size,
+      nextOffset,
+      hasMore: nextOffset !== null
+    }
+  };
 }
 
 /**
@@ -128,7 +162,10 @@ function readUnifiedCollection(collectionsDir = './unified-collections') {
 function processSchedulerFromUnified(subtypeData, targets) {
   let count = 0;
   
-  for (const mongoSafeIdentifier of Object.keys(subtypeData || {})) {
+  // Sort identifiers alphabetically so the iteration order is deterministic
+  // across runs, independent of how the unified-collection JSON was written.
+  const identifierKeys = Object.keys(subtypeData || {}).sort();
+  for (const mongoSafeIdentifier of identifierKeys) {
     const classNames = subtypeData[mongoSafeIdentifier] || [];
     const identifier = fromMongoSafeFieldName(mongoSafeIdentifier);
     
@@ -153,7 +190,10 @@ function processSchedulerFromUnified(subtypeData, targets) {
 function processAssetApiFromUnified(subtypeData, targets) {
   let count = 0;
   
-  for (const mongoSafeIdentifier of Object.keys(subtypeData || {})) {
+  // Sort identifiers alphabetically so the iteration order is deterministic
+  // across runs, independent of how the unified-collection JSON was written.
+  const identifierKeys = Object.keys(subtypeData || {}).sort();
+  for (const mongoSafeIdentifier of identifierKeys) {
     const classNames = subtypeData[mongoSafeIdentifier] || [];
     const identifier = fromMongoSafeFieldName(mongoSafeIdentifier);
     
@@ -178,7 +218,10 @@ function processAssetApiFromUnified(subtypeData, targets) {
 function processEventListenerFromUnified(subtypeData, targets) {
   let count = 0;
   
-  for (const mongoSafeIdentifier of Object.keys(subtypeData || {})) {
+  // Sort identifiers alphabetically so the iteration order is deterministic
+  // across runs, independent of how the unified-collection JSON was written.
+  const identifierKeys = Object.keys(subtypeData || {}).sort();
+  for (const mongoSafeIdentifier of identifierKeys) {
     const classNames = subtypeData[mongoSafeIdentifier] || [];
     const identifier = fromMongoSafeFieldName(mongoSafeIdentifier);
     
@@ -203,7 +246,10 @@ function processEventListenerFromUnified(subtypeData, targets) {
 function processResourceChangeListenerFromUnified(subtypeData, targets) {
   let count = 0;
   
-  for (const mongoSafeIdentifier of Object.keys(subtypeData || {})) {
+  // Sort identifiers alphabetically so the iteration order is deterministic
+  // across runs, independent of how the unified-collection JSON was written.
+  const identifierKeys = Object.keys(subtypeData || {}).sort();
+  for (const mongoSafeIdentifier of identifierKeys) {
     const classNames = subtypeData[mongoSafeIdentifier] || [];
     const identifier = fromMongoSafeFieldName(mongoSafeIdentifier);
     
@@ -228,7 +274,10 @@ function processResourceChangeListenerFromUnified(subtypeData, targets) {
 function processEventHandlerFromUnified(subtypeData, targets) {
   let count = 0;
   
-  for (const mongoSafeIdentifier of Object.keys(subtypeData || {})) {
+  // Sort identifiers alphabetically so the iteration order is deterministic
+  // across runs, independent of how the unified-collection JSON was written.
+  const identifierKeys = Object.keys(subtypeData || {}).sort();
+  for (const mongoSafeIdentifier of identifierKeys) {
     const classNames = subtypeData[mongoSafeIdentifier] || [];
     const identifier = fromMongoSafeFieldName(mongoSafeIdentifier);
     
@@ -248,9 +297,21 @@ function processEventHandlerFromUnified(subtypeData, targets) {
 }
 
 /**
- * Fetch findings from unified collection (mimics cam-bpa-fetcher behavior)
+ * Fetch findings from unified collection (mimics cam-bpa-fetcher behavior).
+ *
+ * The full ordered list for the requested `pattern` is assembled, then
+ * sliced into a batch via {@link paginate}. The returned object contains
+ * `targets` (the batch) and `paging` (batch metadata for resuming).
+ *
+ * Ordering contract: for a given unified-collection.json file and a given
+ * `pattern`, successive calls with incrementing `offset` return contiguous,
+ * non-overlapping batches covering the full list.
+ *
+ * @param {string} pattern
+ * @param {string} collectionsDir
+ * @param {{offset?: number, limit?: number|null|'all'}} [paging]
  */
-function fetchUnifiedBpaFindings(pattern = "all", collectionsDir = './unified-collections') {
+function fetchUnifiedBpaFindings(pattern = "all", collectionsDir = './unified-collections', paging = {}) {
   const result = new BpaResult();
   
   // Check if unified collection exists
@@ -293,8 +354,10 @@ function fetchUnifiedBpaFindings(pattern = "all", collectionsDir = './unified-co
     return result;
   }
   
-  const patternsToFetch = pattern === "all" 
-    ? availablePatterns
+  // Sort patterns alphabetically so "all" returns findings in a deterministic
+  // order independent of how availablePatterns was produced.
+  const patternsToFetch = pattern === "all"
+    ? [...availablePatterns].sort()
     : availablePatterns.filter(p => p === pattern);
   
   if (patternsToFetch.length === 0) {
@@ -356,10 +419,15 @@ function fetchUnifiedBpaFindings(pattern = "all", collectionsDir = './unified-co
     ];
     return result;
   }
-  
+
+  const { targets, paging: p } = paginate(result.targets, paging);
+  result.targets = targets;
+  result.paging = p;
   result.success = true;
-  console.log(`[Unified Collection Reader] Successfully loaded ${result.targets.length} findings from unified collection`);
-  
+  console.log(
+    `[Unified Collection Reader] Batch ${p.returned}/${p.total} ` +
+    `(offset ${p.offset}, hasMore=${p.hasMore})`
+  );
   return result;
 }
 
@@ -391,16 +459,26 @@ function getUnifiedCollectionSummary(collectionsDir = './unified-collections') {
 
 /**
  * CLI interface for testing
+ *
+ * Usage: node unified-collection-reader.js <pattern> [collectionsDir] [offset] [limit]
+ *   offset defaults to 0
+ *   limit  defaults to 5 (use 'all' to disable batching)
  */
 function main() {
   const args = process.argv.slice(2);
   const pattern = args[0] || 'all';
   const collectionsDir = args[1] || './unified-collections';
-  
+  const offset = args[2] !== undefined ? Number(args[2]) : 0;
+  const limit = args[3] !== undefined
+    ? (args[3] === 'all' ? null : Number(args[3]))
+    : DEFAULT_BATCH_SIZE;
+
   console.log('Unified Collection Reader');
   console.log('========================');
   console.log(`Pattern: ${pattern}`);
   console.log(`Collections Directory: ${collectionsDir}`);
+  console.log(`Offset: ${offset}`);
+  console.log(`Limit:  ${limit === null ? 'all' : limit}`);
   console.log('');
   
   // Check if unified collection exists
@@ -427,11 +505,11 @@ function main() {
   console.log('');
   
   // Fetch findings
-  const result = fetchUnifiedBpaFindings(pattern, collectionsDir);
-  
+  const result = fetchUnifiedBpaFindings(pattern, collectionsDir, { offset, limit });
+
   if (result.success) {
-    console.log('✅ Successfully loaded findings:');
-    console.log(`📊 Total targets: ${result.targets.length}`);
+    const p = result.paging;
+    console.log(`✅ Batch ${p.returned}/${p.total} (offset ${p.offset}, next ${p.nextOffset ?? 'none'}, hasMore=${p.hasMore})`);
     console.log('');
     
     // Group by pattern
@@ -475,6 +553,8 @@ module.exports = {
   fetchUnifiedBpaFindings,
   getUnifiedCollectionSummary,
   readUnifiedCollection,
+  paginate,
+  DEFAULT_BATCH_SIZE,
   BpaTarget,
   BpaResult
 };

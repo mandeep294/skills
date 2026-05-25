@@ -8,6 +8,7 @@ Repository of Adobe skills for AI coding agents.
 
 ```bash
 /plugin marketplace add adobe/skills
+/plugin install aem-design@adobe-skills
 /plugin install aem-edge-delivery-services@adobe-skills
 /plugin install aem-project-management@adobe-skills
 /plugin install app-builder@adobe-skills
@@ -34,10 +35,23 @@ gh upskill adobe/skills --all
 
 #### Adobe Experience Manager
 
+##### Designing with aem-design
+
+Design-phase skills that run *before* implementation. Produces static HTML and JSON artifacts under `aem-design/` — EDS-independent; no dev server or AEM instance required.
+
+| Skill | Description |
+|-------|-------------|
+| `aem-design` | Navigator — assesses `aem-design/` state and recommends the next design stage |
+| `brand` | Extracts a brand profile (`brand-profile.json`) and visual brand board from a URL, PDF, or conversation |
+| `briefings` | Captures page intent, audience, key messages, CTAs, and (optionally) final copy under `aem-design/briefings/` |
+| `wireframes` | Produces grey structural wireframes from briefings (section order, hierarchy, spatial relationships) — optional stage |
+| `prototype` | Produces branded, high-fidelity static HTML prototypes that iterate in the browser until approved |
+
 ##### Developing with Edge Delivery Services
 
 | Skill | Description |
 |-------|-------------|
+| `create-site` | Start a brand-new site from scratch: GitHub repo from boilerplate, aem-code-sync, initial DA content (nav, footer, homepage), and live URL handoff |
 | `content-driven-development` | Orchestrates the CDD workflow for all code changes |
 | `analyze-and-plan` | Analyze requirements and define acceptance criteria |
 | `building-blocks` | Implement blocks and core functionality |
@@ -65,6 +79,19 @@ gh upskill adobe/skills --all
 | `authoring-analysis` | Determine authoring approach |
 | `generate-import-html` | Generate structured HTML |
 | `preview-import` | Preview imported content |
+
+##### Managing Projects
+
+Handover documentation and PDF guides generation for AEM Edge Delivery Services projects. Available via the `aem-project-management` plugin.
+
+| Skill | Description |
+|-------|-------------|
+| `handover` | Orchestrates project documentation generation |
+| `authoring` | Generate comprehensive authoring guide for content authors |
+| `development` | Generate technical documentation for developers |
+| `admin` | Generate admin guide for site administrators |
+| `whitepaper` | Create professional PDF whitepapers from Markdown |
+| `auth` | Authenticate with AEM Config Service API |
 
 ### AEM as a Cloud Service — Create Component
 
@@ -147,6 +174,16 @@ The aem-replication skill contains four specialist sub-skills:
 - 12+ troubleshooting scenarios with step-by-step resolution
 - 3,575 lines of comprehensive documentation
 
+### AEM as a Cloud Service — Rapid Development Environment (RDE) *(beta)*
+
+The `aem-rde` skill provides expert assistance for the Adobe I/O CLI plugin `@adobe/aio-cli-plugin-aem-rde` — used to deploy, inspect, log-tail, snapshot, and troubleshoot AEM Rapid Development Environments via `aio aem rde …` commands. The skill activates only on explicit RDE references; generic AEMaaCS deployment requests are deferred to Cloud Manager skills.
+
+| Skill | Description |
+|-------|-------------|
+| `aem-rde` *(beta)* | Translate goals into the right `aio aem rde` commands (deploy, status, history, logs, inspect, snapshot, setup); diagnose RDE problems; guide setup, experimental feature flags, and CI/build-environment usage |
+
+See `plugins/aem/cloud-service/skills/aem-rde/` for the skill and its reference files (commands, configuration, deployment types, troubleshooting, workflows).
+
 ### AEM as a Cloud Service — Best Practices & Migration
 
 Under `plugins/aem/cloud-service/skills/`, **`best-practices/`** is the **general-purpose** Cloud Service skill: pattern modules, Java baseline references (SCR→OSGi DS, resolver/logging, and related refs), and day-to-day Cloud Service alignment. Use it **without** loading **migration** for greenfield or maintainability work. **`migration/`** (BPA/CAM orchestration) is **scoped to legacy AEM → AEM as a Cloud Service** (not Edge Delivery or 6.5 LTS); it **delegates** concrete refactors to **`best-practices`** (`references/`). **Installing the AEM as a Cloud Service plugin** (`aem-cloud-service`, or the `plugins/aem/cloud-service` path with `npx skills` / `gh upskill`) **includes both**; the agent should load the appropriate `SKILL.md` for the task. Use **`gh upskill` / `npx skills` with `--skill`** when you need a specific bundled skill (see **Installation** above).
@@ -154,19 +191,6 @@ Under `plugins/aem/cloud-service/skills/`, **`best-practices/`** is the **genera
 **Key features:**
 - **Best practices:** one skill for patterns, SCR→OSGi DS, and resolver/logging — applicable to Cloud Service projects generally, not only migration
 - **Migration:** orchestration-only; pattern and transformation content lives in **`best-practices`**
-
-##### Managing Projects
-
-Handover documentation and PDF generation for AEM Edge Delivery Services projects.
-
-| Skill | Description |
-|-------|-------------|
-| `handover` | Orchestrates project documentation generation |
-| `authoring` | Generate comprehensive authoring guide for content authors |
-| `development` | Generate technical documentation for developers |
-| `admin` | Generate admin guide for site administrators |
-| `whitepaper` | Create professional PDF whitepapers from Markdown |
-| `auth` | Authenticate with AEM Config Service API |
 
 ### App Builder
 
@@ -188,7 +212,14 @@ Development, customization, testing, and deployment skills for Adobe App Builder
 
 ### Creativity & Design
 
-_Coming soon._
+| Skill | Description |
+|-------|-------------|
+| `adobe-batch-edit-photos` | Apply consistent, cohesive photo adjustments across a set of images — matched tones, presets, and cinematic looks |
+| `adobe-design-from-template` | Create flyers, posters, social posts, invitations, business cards, and other visuals from Adobe Express templates |
+| `adobe-retouch-portraits` | Bulk walk-away retouching for wedding and event portraits: auto-straighten, auto-tone, and auto-light across a folder |
+| `adobe-edit-quick-cut` | Turn a long video into a punchy sizzle or highlight reel using Adobe Quick Cut |
+| `adobe-resize-photos-and-videos` | Resize images and videos to exact pixel dimensions, aspect ratios, or named sizes (4K, HD, A4) |
+| `adobe-create-social-variations` | Produce platform-ready image and video crops for Instagram, TikTok, LinkedIn, YouTube, and other social platforms |
 
 ## Repository Structure
 
@@ -285,17 +316,24 @@ plugins/
 │               ├── performance-tuning/
 │               ├── security-hardening/
 │               └── workflow-orchestrator/
-└── app-builder/
-    ├── .claude-plugin/
-    │   └── plugin.json
-    └── skills/
-        ├── _shared/
-        ├── appbuilder-project-init/
-        ├── appbuilder-action-scaffolder/
-        ├── appbuilder-ui-scaffolder/
-        ├── appbuilder-testing/
-        ├── appbuilder-e2e-testing/
-        └── appbuilder-cicd-pipeline/
+├── app-builder/
+│   ├── .claude-plugin/
+│   │   └── plugin.json
+│   └── skills/
+│       ├── _shared/
+│       ├── appbuilder-project-init/
+│       ├── appbuilder-action-scaffolder/
+│       ├── appbuilder-ui-scaffolder/
+│       ├── appbuilder-testing/
+│       ├── appbuilder-e2e-testing/
+│       └── appbuilder-cicd-pipeline/
+└── creative-cloud/
+    └── adobe-for-creativity/
+        ├── .claude-plugin/
+        │   └── plugin.json
+        ├── skills/
+        │   └── ...
+        └── .mcp.json
 ```
 
 ## Contributing

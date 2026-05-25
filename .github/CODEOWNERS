@@ -17,7 +17,7 @@
 /plugins/aem/edge-delivery-services/                   @shsteimer
 
 # AEM Project Management (Astha Bhargava is sole author)
-/plugins/aem/project-management/                       @AsthaBhargava
+/plugins/aem/project-management/                       @asthabh23
 
 # AEM Cloud Service (in-flight, contributors: abhishekgarg18, pkumargaddam, Himanich, akankshajain18, rombert)
 /plugins/aem/cloud-service/                            @abhishekgarg18 @pkumargaddam @Himanich @akankshajain18 @rombert
@@ -26,4 +26,10 @@
 /plugins/aem/6.5-lts/                                  @abhishekgarg18 @akankshajain18 @rombert
 
 # Adobe App Builder
-/plugins/app-builder/skills                            @pkumargaddam
+/plugins/app-builder                                   @pkumargaddam
+
+# Adobe for creativity
+/plugins/creative-cloud/adobe-for-creativity           @bossjones @njampani123 @solimant
+
+# Stardust
+/plugins/stardust                                      @paolomoz

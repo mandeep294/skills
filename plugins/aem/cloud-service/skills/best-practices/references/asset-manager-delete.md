@@ -1,14 +1,20 @@
-# Asset Manager Path B: Delete → HTTP Assets API
+# Asset Manager Path B: Delete
 
-For files using deprecated `removeAssetForBinary()`.
+For files using `AssetManager.removeAssetForBinary(binaryFilePath, doSave)` — an API that
+**does not exist on AEM as a Cloud Service**.
 
-This deprecated API is replaced with the **HTTP Assets API** `DELETE /api/assets{path}`.
+On AEMaaCS, asset deletion splits two ways:
+
+| Where is the deleter running? | Use |
+|------------------------------|-----|
+| **Inside the AEM JVM** (servlet, Sling job, scheduler, workflow step) | Service-user `ResourceResolver` + `resolver.delete(resource)` + `resolver.commit()`. **Never** call AEM's own HTTP API from inside the JVM. |
+| **Outside AEM** (ingestion worker, integration backend, CLI) | HTTP Assets API `DELETE /api/assets{path}` with an **IMS / dev-console bearer token** (never a static password). |
 
 ---
 
 ## Complete Example: Before and After
 
-### Before (Legacy AssetManager API)
+### Before (removed API)
 
 ```java
 package com.example.servlets;
@@ -32,9 +38,9 @@ public class DeleteAssetServlet extends SlingAllMethodsServlet {
     @Override
     protected void doDelete(SlingHttpServletRequest request, SlingHttpServletResponse response)
             throws ServletException, IOException {
-        
+
         String binaryFilePath = request.getParameter("path");
-        
+
         try {
             boolean isDeleted = assetManager.removeAssetForBinary(binaryFilePath, true);
             response.setContentType("text/plain");
@@ -54,125 +60,144 @@ public class DeleteAssetServlet extends SlingAllMethodsServlet {
 }
 ```
 
-### After (Cloud Service Compatible - Client-Side)
+### After — in-JVM delete with a service-user resolver (recommended)
 
-**Client-side JavaScript:**
-```javascript
-async function deleteAsset(assetPath, host, credentials) {
-    try {
-        const response = await axios.delete(`${host}/api/assets${assetPath}`, {
-            auth: {
-                username: credentials.username,
-                password: credentials.password
-            }
-        });
-        return response.status === 200 || response.status === 204;
-    } catch (error) {
-        if (error.response?.status === 404) {
-            return false; // Asset not found
-        }
-        throw error;
-    }
-}
-```
+Server-side code that already has a trusted `ResourceResolver` should delete assets directly.
+No HTTP, no credentials, no self-loopback.
 
-### After (Cloud Service Compatible - Server-Side Java)
-
-**If servlet must remain:**
 ```java
 package com.example.servlets;
 
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.osgi.service.component.annotations.Component;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.SlingHttpServletResponse;
-import org.apache.sling.api.servlets.SlingAllMethodsServlet;
+import org.apache.sling.api.resource.LoginException;
+import org.apache.sling.api.resource.PersistenceException;
+import org.apache.sling.api.resource.Resource;
+import org.apache.sling.api.resource.ResourceResolver;
+import org.apache.sling.api.resource.ResourceResolverFactory;
 import org.apache.sling.api.servlets.ServletResolverConstants;
+import org.apache.sling.api.servlets.SlingAllMethodsServlet;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.servlet.Servlet;
 import javax.servlet.ServletException;
 import java.io.IOException;
-import java.util.Base64;
+import java.util.Collections;
 
 @Component(service = Servlet.class, property = {
-    ServletResolverConstants.SLING_SERVLET_PATHS + "=/bin/deleteasset"
+        ServletResolverConstants.SLING_SERVLET_PATHS + "=/bin/deleteasset"
 })
 public class DeleteAssetServlet extends SlingAllMethodsServlet {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeleteAssetServlet.class);
 
+    @Reference
+    private ResourceResolverFactory resolverFactory;
+
     @Override
     protected void doDelete(SlingHttpServletRequest request, SlingHttpServletResponse response)
             throws ServletException, IOException {
-        
+
         String assetPath = request.getParameter("path");
-        if (assetPath == null || assetPath.isEmpty()) {
+        if (assetPath == null || assetPath.isEmpty() || !assetPath.startsWith("/content/dam/")) {
             response.setStatus(400);
-            response.getWriter().write("{\"error\":\"path parameter required\"}");
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\":\"valid /content/dam path parameter required\"}");
             return;
         }
 
-        try {
-            // Use HTTP Assets API
-            String host = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
-            String apiUrl = host + "/api/assets" + assetPath;
-            
-            HttpClient client = HttpClientBuilder.create().build();
-            HttpDelete deleteRequest = new HttpDelete(apiUrl);
-            
-            // Add authentication header (use service user credentials)
-            String auth = Base64.getEncoder().encodeToString(
-                (request.getUserPrincipal().getName() + ":password").getBytes()
-            );
-            deleteRequest.setHeader("Authorization", "Basic " + auth);
-            
-            org.apache.http.HttpResponse httpResponse = client.execute(deleteRequest);
-            int statusCode = httpResponse.getStatusLine().getStatusCode();
-            
-            response.setContentType("application/json");
-            if (statusCode == 200 || statusCode == 204) {
-                response.getWriter().write("{\"success\":true,\"message\":\"Asset deleted: " + assetPath + "\"}");
-            } else if (statusCode == 404) {
+        try (ResourceResolver resolver = resolverFactory.getServiceResourceResolver(
+                Collections.singletonMap(ResourceResolverFactory.SUBSERVICE, "asset-admin-service"))) {
+
+            Resource resource = resolver.getResource(assetPath);
+            if (resource == null) {
                 response.setStatus(404);
-                response.getWriter().write("{\"error\":\"Asset not found: " + assetPath + "\"}");
-            } else {
-                response.setStatus(statusCode);
-                response.getWriter().write("{\"error\":\"Delete failed with status: " + statusCode + "\"}");
+                response.setContentType("application/json");
+                response.getWriter().write("{\"error\":\"asset not found\"}");
+                return;
             }
-            
-        } catch (Exception e) {
-            LOG.error("Error deleting asset: {}", assetPath, e);
+
+            resolver.delete(resource);
+            resolver.commit();
+
+            response.setContentType("application/json");
+            response.getWriter().write("{\"success\":true}");
+            LOG.info("Deleted asset at {}", assetPath);
+
+        } catch (LoginException e) {
+            LOG.error("Could not open service resolver for subservice 'asset-admin-service'", e);
             response.setStatus(500);
-            response.getWriter().write("{\"error\":\"Internal server error\"}");
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\":\"internal error\"}");
+        } catch (PersistenceException e) {
+            LOG.error("Commit failed while deleting asset {}", assetPath, e);
+            response.setStatus(500);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\":\"internal error\"}");
         }
     }
 }
 ```
 
-**Key Changes:**
-- ✅ Removed `AssetManager.removeAssetForBinary()` calls
-- ✅ Migrated to HTTP Assets API `DELETE /api/assets{path}`
-- ✅ Removed Felix SCR → OSGi DS annotations
-- ✅ Replaced `System.out/err` → SLF4J Logger
-- ✅ Used HttpClient for server-side API calls
-- ✅ Proper error handling and status codes
+Supporting Repoinit / service-user mapping (in `ui.config`):
+
+```
+create service user asset-admin-service
+
+set ACL for asset-admin-service
+    allow jcr:read,rep:write,jcr:removeNode,jcr:removeChildNodes on /content/dam
+end
+```
+
+```json
+{
+  "user.mapping": [
+    "com.example.mybundle:asset-admin-service=[asset-admin-service]"
+  ]
+}
+```
+
+### After — external-caller delete via the HTTP Assets API
+
+If the deleter is **outside** the AEM JVM (integration backend, CLI, worker), call the HTTP API
+with an IMS or dev-console bearer token — not with a hardcoded password.
+
+```javascript
+import axios from 'axios';
+
+export async function deleteAsset({ host, assetPath, bearerToken }) {
+    const response = await axios.delete(`${host}/api/assets${assetPath}`, {
+        headers: { Authorization: `Bearer ${bearerToken}` },
+        validateStatus: s => s === 200 || s === 204 || s === 404
+    });
+    return response.status !== 404;
+}
+```
+
+**Key changes:**
+
+- Removed use of `AssetManager.removeAssetForBinary()` (the API is gone on AEMaaCS).
+- Server-side deletion goes through `ResourceResolver#delete` + `commit`, using a service user
+  provisioned via Repoinit.
+- No hardcoded `":password"` anywhere. External callers use an IMS / dev-console token.
+- Removed Felix SCR → OSGi DS.
+- Replaced `System.out` / `System.err` / `printStackTrace` with SLF4J.
 
 ---
 
 ## Pattern prerequisites
 
-Read [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) for Java/OSGi hygiene. Asset delete scope follows **this file** and `asset-manager.md` only.
+Read [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md)
+for Java/OSGi hygiene. Asset delete scope follows this file and
+[`asset-manager.md`](asset-manager.md) only.
 
-## D1: Replace removeAssetForBinary with HTTP Assets API
-
-**Remove deprecated API usage:**
+## D1: Replace `removeAssetForBinary` with `ResourceResolver#delete` (in-JVM)
 
 ```java
-// BEFORE (deprecated)
+// BEFORE (removed API)
 boolean isAssetDeleted = assetManager.removeAssetForBinary(binaryFilePath, doSave);
 if (isAssetDeleted) {
     response.getWriter().write("Asset deleted successfully: " + binaryFilePath);
@@ -180,63 +205,84 @@ if (isAssetDeleted) {
     response.getWriter().write("Failed to delete asset.");
 }
 
-// AFTER (Cloud Service — use HTTP Assets API)
-// Option A: Call HTTP API from Java (requires HttpClient/HttpURLConnection)
-//   DELETE {host}/api/assets{path}
-//   with basic auth
-//
-// Option B: Migrate to client-side delete using HTTP API:
-//   const response = await axios.delete(`${host}/api/assets${assetPath}`, {
-//       auth: { username, password }
-//   });
+// AFTER — in-JVM
+try (ResourceResolver resolver = resolverFactory.getServiceResourceResolver(
+        Collections.singletonMap(ResourceResolverFactory.SUBSERVICE, "asset-admin-service"))) {
+
+    Resource resource = resolver.getResource(assetPath);   // repository path, not binary path
+    if (resource == null) {
+        // asset already gone
+        return;
+    }
+    resolver.delete(resource);
+    resolver.commit();
+} catch (LoginException e) {
+    LOG.error("Could not open service resolver for subservice 'asset-admin-service'", e);
+} catch (PersistenceException e) {
+    LOG.error("Commit failed while deleting asset {}", assetPath, e);
+}
 ```
 
-**HTTP API delete example (client-side):**
+Notes:
+
+- `assetPath` must be the **repository path** (e.g. `/content/dam/site/file.jpg`) — the old
+  "binary path" concept does not exist on AEMaaCS.
+- The service user behind the `SUBSERVICE` name must have
+  `jcr:removeNode` / `jcr:removeChildNodes` on the asset tree (Repoinit rule above).
+- Do not call AEM's own HTTP API (`/api/assets`) from inside the JVM — it adds an extra hop,
+  requires credentials you shouldn't store, and breaks idempotency.
+
+## D2: For external callers, use the HTTP Assets API with a bearer token
+
 ```javascript
-const response = await axios.delete(`${host}/api/assets${assetPath}`, {
-    auth: { username, password }
+await axios.delete(`${host}/api/assets${assetPath}`, {
+    headers: { Authorization: `Bearer ${bearerToken}` }
 });
 ```
 
-**ResourceResolver + logging:** Apply [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) for any remaining servlet or service code.
+Where `bearerToken` comes from:
 
-## D2: Update imports
+- **Adobe Developer Console / IMS** service credentials (server-to-server), **or**
+- A short-lived user token obtained via the AEM login flow.
 
-**Remove (when deprecated AssetManager delete usage is removed):**
-```java
-import com.day.cq.dam.api.AssetManager;  // if no longer needed
-```
+**Never** hardcode usernames and passwords in source or pass `":password"` strings.
 
-**Keep (if AssetManager still used for other operations):**
+## D3: Update imports
+
+**Remove** (when all `AssetManager` delete calls are gone):
+
 ```java
 import com.day.cq.dam.api.AssetManager;
 ```
 
-**Add (for logging):**
-```java
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-```
+**Keep** if the file still uses `AssetManager.getAsset(...)` for reads.
 
-**Remove (Felix SCR, if migrated):**
-```java
-import org.apache.felix.scr.annotations.*;
-```
+**Add** (for the in-JVM delete path):
 
-**Add (OSGi DS, if migrated):**
 ```java
+import org.apache.sling.api.resource.LoginException;
+import org.apache.sling.api.resource.PersistenceException;
+import org.apache.sling.api.resource.Resource;
+import org.apache.sling.api.resource.ResourceResolver;
+import org.apache.sling.api.resource.ResourceResolverFactory;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
-import org.apache.sling.api.servlets.ServletResolverConstants;
-import javax.servlet.Servlet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.util.Collections;
 ```
+
+Remove Felix SCR imports per [scr-to-osgi-ds.md](scr-to-osgi-ds.md).
 
 ---
 
-# Validation
+## Validation
 
-- [ ] No `removeAssetForBinary(binaryFilePath, doSave)` calls remain
-- [ ] HTTP Assets API `DELETE /api/assets{path}` used (client or server)
-- [ ] [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) satisfied for SCR, resolver, logging
-- [ ] `@Reference` AssetManager removed if no longer needed for delete flows
-- [ ] Code compiles: `mvn clean compile`
+- [ ] No `removeAssetForBinary(` calls remain.
+- [ ] In-JVM deletes use `resolver.delete(resource)` + `resolver.commit()` with a service-user resolver; the servlet no longer calls AEM's own HTTP API.
+- [ ] Service user + mapping provisioned via Repoinit in `ui.config`, with ACLs granting `jcr:removeNode` / `jcr:removeChildNodes` on the asset tree.
+- [ ] No hardcoded credentials (`":password"`, plain-text basic auth strings) anywhere.
+- [ ] External-caller examples use a bearer token — not basic auth with a literal password.
+- [ ] [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) satisfied for SCR, resolver, logging.
+- [ ] `@Reference AssetManager` removed if no longer needed for delete flows.
+- [ ] Code compiles: `mvn clean compile`.

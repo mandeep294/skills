@@ -1,14 +1,34 @@
-# Asset Manager Path A: Create/Upload → Direct Binary Access
+# Asset Manager Path A: Create / Upload
 
-For files using deprecated `createAsset()`, `createAssetForBinary()`, or `getAssetForBinary()`.
+For files using the `AssetManager` create / upload APIs.
 
-These deprecated APIs are replaced with **Direct Binary Access** via the `@adobe/aem-upload` SDK (client-side) or HTTP API (server-side).
+**Scope:**
+
+- `AssetManager.createAssetForBinary(binaryFilePath, doSave)` — **removed on AEMaaCS** → Direct Binary Access.
+- `AssetManager.getAssetForBinary(binaryFilePath)` — **removed on AEMaaCS** → path-based lookup via `resolver.getResource(...).adaptTo(Asset.class)`.
+- `AssetManager.createAsset(path, InputStream, mimeType, doSave)` — **still supported** for in-JVM use, but client-facing servlets that accept uploads must move to Direct Binary Access.
+
+---
+
+## When does `createAsset` need to change?
+
+| Caller | Keep `createAsset(path, is, mimeType, doSave)`? |
+|--------|--------------------------------------------------|
+| Client-facing servlet accepting `multipart` / `InputStream` from a browser or external caller | **No** — migrate to Direct Binary Access. |
+| Back-office utility creating small assets from a bundled resource or another already-in-JVM stream (fixtures, reports, migration imports) | **Yes, still supported.** Use a service-user resolver and close the stream. |
+| Scheduled asset ingestion pulling from an external source | **Prefer** Direct Binary Access through the HTTP API; the job acts as an external client. |
+
+When you keep `createAsset`, apply [resource-resolver-logging.md](resource-resolver-logging.md)
+and make sure the `InputStream` is closed in try-with-resources.
+
+`createAssetForBinary` and `getAssetForBinary` are always replaced — those APIs do not exist on
+AEMaaCS.
 
 ---
 
 ## Complete Example: Before and After
 
-### Before (Legacy AssetManager API)
+### Before (client-facing upload via `AssetManager.createAsset`)
 
 ```java
 package com.example.servlets;
@@ -34,11 +54,11 @@ public class CreateAssetServlet extends SlingAllMethodsServlet {
     @Override
     protected void doPost(SlingHttpServletRequest request, SlingHttpServletResponse response)
             throws ServletException, IOException {
-        
+
         String assetPath = request.getParameter("path");
         String mimeType = request.getParameter("mimeType");
         InputStream inputStream = request.getInputStream();
-        
+
         try {
             Asset asset = assetManager.createAsset(assetPath, inputStream, mimeType, true);
             response.setContentType("text/plain");
@@ -53,11 +73,12 @@ public class CreateAssetServlet extends SlingAllMethodsServlet {
 }
 ```
 
-### After (Cloud Service Compatible - Client-Side Upload)
+### After — Cloud Service compatible (client-side Direct Binary Access)
 
-**Note:** In AEM Cloud Service, asset creation from InputStream in servlets is deprecated. Migrate to client-side upload using Direct Binary Access.
+On AEMaaCS the upload must happen **directly between the client and the binary store**; the AEM
+JVM orchestrates the upload but does not carry the bytes. Delete the servlet; replace it with a
+client-side upload:
 
-**Client-side JavaScript (replaces servlet):**
 ```javascript
 import DirectBinary from '@adobe/aem-upload';
 
@@ -65,33 +86,28 @@ async function uploadAsset(file, assetPath, host, token) {
     const upload = new DirectBinary.DirectBinaryUpload();
     const options = new DirectBinary.DirectBinaryUploadOptions()
         .withUrl(`${host}/api/assets${assetPath}`)
-        .withUploadFiles([file])
-        .withHttpOptions({ 
-            headers: { 
-                Authorization: `Bearer ${token}`,
-                'Content-Type': file.type
-            } 
+        .withUploadFiles([{ fileName: file.name, blob: file, fileSize: file.size }])
+        .withHttpOptions({
+            headers: {
+                Authorization: `Bearer ${token}`   // IMS / dev-console token — never a static password
+            }
         });
-    
-    try {
-        const result = await upload.uploadFiles(options);
-        return result;
-    } catch (error) {
-        console.error('Upload failed:', error);
-        throw error;
-    }
+
+    return upload.uploadFiles(options);
 }
 ```
 
-**If servlet must remain (redirects to client-side):**
+If the servlet **must** remain (for example, routing / ACL reasons), return a clear error
+instead of accepting the upload — do **not** silently call a removed API:
+
 ```java
 package com.example.servlets;
 
-import org.osgi.service.component.annotations.Component;
 import org.apache.sling.api.SlingHttpServletRequest;
 import org.apache.sling.api.SlingHttpServletResponse;
 import org.apache.sling.api.servlets.SlingAllMethodsServlet;
 import org.apache.sling.api.servlets.ServletResolverConstants;
+import org.osgi.service.component.annotations.Component;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -100,7 +116,7 @@ import javax.servlet.ServletException;
 import java.io.IOException;
 
 @Component(service = Servlet.class, property = {
-    ServletResolverConstants.SLING_SERVLET_PATHS + "=/bin/createasset"
+        ServletResolverConstants.SLING_SERVLET_PATHS + "=/bin/createasset"
 })
 public class CreateAssetServlet extends SlingAllMethodsServlet {
 
@@ -109,130 +125,133 @@ public class CreateAssetServlet extends SlingAllMethodsServlet {
     @Override
     protected void doPost(SlingHttpServletRequest request, SlingHttpServletResponse response)
             throws ServletException, IOException {
-        
-        // In Cloud Service, asset creation must use Direct Binary Access
-        // Redirect client to use @adobe/aem-upload SDK
+        LOG.warn("Legacy upload endpoint hit — clients must use Direct Binary Access.");
+        response.setStatus(410);   // 410 Gone — the operation moved
         response.setContentType("application/json");
-        response.setStatus(400);
-        response.getWriter().write("{\"error\":\"Asset creation must use Direct Binary Access. " +
-            "Use @adobe/aem-upload SDK client-side or HTTP API.\"}");
-        LOG.warn("Deprecated createAsset API called - redirecting to Direct Binary Access");
+        response.getWriter().write(
+                "{\"error\":\"Use Direct Binary Access (/api/assets + @adobe/aem-upload) to upload assets.\"}");
     }
 }
 ```
 
-**Key Changes:**
-- ✅ Removed `AssetManager.createAsset()` calls
-- ✅ Migrated to Direct Binary Access pattern (`@adobe/aem-upload`)
-- ✅ Removed Felix SCR → OSGi DS annotations
-- ✅ Replaced `System.out/err` → SLF4J Logger
-- ✅ Servlet redirects to client-side upload pattern
+**Key changes:**
+
+- Removed client-facing use of `AssetManager.createAsset(path, InputStream, mimeType, boolean)` —
+  replaced with Direct Binary Access.
+- No more `createAssetForBinary` / `getAssetForBinary` — these APIs are not available on AEMaaCS.
+- Removed Felix SCR → OSGi DS.
+- Replaced `System.out` / `System.err` with SLF4J.
 
 ---
 
 ## Pattern prerequisites
 
-Read [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) for Java/OSGi hygiene. Asset creation/upload scope follows **this file** and `asset-manager.md` only.
+Read [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md)
+for Java/OSGi hygiene (SCR → DS, service-user resolvers, SLF4J). Asset creation/upload scope
+follows this file and [`asset-manager.md`](asset-manager.md) only.
 
-## C1: Replace createAssetForBinary / getAssetForBinary with Direct Binary Access
+## C1: Replace `createAssetForBinary` / `getAssetForBinary`
 
-**Remove deprecated API usage:**
+These APIs do not exist on AEMaaCS. Remove every call.
 
 ```java
-// BEFORE (deprecated)
+// BEFORE (removed API)
 assetManager.createAssetForBinary(binaryFilePath, doSave);
 Asset asset = assetManager.getAssetForBinary(binaryFilePath);
-if (asset != null) {
-    response.getWriter().write("Asset created successfully: " + asset.getPath());
-} else {
-    response.getWriter().write("Failed to create asset.");
-}
-
-// AFTER (Cloud Service — use Direct Binary Access)
-// In AEM as a Cloud Service, asset creation must use Direct Binary Access.
-// Migrate to client-side upload using @adobe/aem-upload SDK:
-//   const DirectBinary = require('@adobe/aem-upload');
-//   const upload = new DirectBinary.DirectBinaryUpload();
-//   const options = new DirectBinary.DirectBinaryUploadOptions()
-//       .withUrl(targetUrl)
-//       .withUploadFiles(uploadFiles)
-//       .withHttpOptions({ headers: { Authorization: ... } });
-//   upload.uploadFiles(options).then(...)
-// See: https://experienceleague.adobe.com/docs/experience-manager-cloud-service/content/assets/admin/direct-binary-access.html
 ```
 
-**For Java servlets that must remain:** Redirect to client-side upload flow or return instructions. Do not retain deprecated calls.
+**Replacements:**
 
-## C2: Replace createAsset(path, is, mimeType, overwrite) with Direct Binary Access
+| Legacy call | AEMaaCS replacement |
+|-------------|----------------------|
+| `createAssetForBinary(binaryFilePath, doSave)` | **Direct Binary Access** (`@adobe/aem-upload` or HTTP `POST /api/assets`). The binary never sits on the AEM filesystem. |
+| `getAssetForBinary(binaryFilePath)` | `resolver.getResource(repoPath).adaptTo(Asset.class)` using the repository path of the asset — not a filesystem path. |
 
-**Remove deprecated API usage:**
+```javascript
+// Direct Binary Access upload (client-side)
+const DirectBinary = require('@adobe/aem-upload');
+const upload = new DirectBinary.DirectBinaryUpload();
+const options = new DirectBinary.DirectBinaryUploadOptions()
+    .withUrl(targetUrl)
+    .withUploadFiles(uploadFiles)
+    .withHttpOptions({ headers: { Authorization: `Bearer ${token}` } });
+await upload.uploadFiles(options);
+```
+
+If the caller used `getAssetForBinary` to locate an existing asset, switch to the repository path:
 
 ```java
-// BEFORE (deprecated)
-AssetManager assetManager = req.getResourceResolver().adaptTo(AssetManager.class);
-Asset imageAsset = assetManager.createAsset("/content/dam/mysite/test." + fileExt, is, mimeType, true);
-resp.setContentType("text/plain");
-resp.getWriter().write("Image Uploaded = " + imageAsset.getName() + " to path = " + imageAsset.getPath());
-
-// AFTER (Cloud Service — use Direct Binary Access)
-// In AEM as a Cloud Service, asset creation from InputStream is deprecated.
-// Migrate to client-side upload using @adobe/aem-upload:
-//   fetch(sourceUrl).then(r => r.blob()).then(blob => {
-//       const upload = new DirectBinary.DirectBinaryUpload();
-//       const options = new DirectBinary.DirectBinaryUploadOptions()
-//           .withUrl(targetUrl)
-//           .withUploadFiles(blob)
-//           .withHttpOptions({ headers: { Authorization: ... } });
-//       upload.uploadFiles(options).then(...);
-//   });
+Resource r = resolver.getResource("/content/dam/my-site/report.pdf");
+Asset asset = r != null ? r.adaptTo(Asset.class) : null;
 ```
 
-**InputStream handling:** Ensure any `InputStream` is closed in try-with-resources or `finally` block. If migrating away from Java entirely, remove the InputStream logic.
+## C2: Decide whether `createAsset(path, InputStream, mimeType, overwrite)` needs to change
 
-**ResourceResolver + logging:** Apply [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) for any remaining servlet or service code that opens a resolver or logs errors.
+Apply the decision table at the top of this file:
+
+- **Client-facing servlet** receiving `request.getInputStream()` or a multipart part from a
+  browser / external caller → replace with Direct Binary Access. Remove the servlet or convert
+  it to a `410 Gone` redirect.
+- **In-JVM utility** creating an asset from a bundled resource / fixture stream → keep
+  `createAsset`, but harden the surrounding code:
+  - Open the resolver via `getServiceResourceResolver(SUBSERVICE)` (see
+    [resource-resolver-logging.md](resource-resolver-logging.md)).
+  - Close the `InputStream` in try-with-resources.
+  - Call `resolver.commit()` only if `doSave=false` was used (AEM usually auto-commits when
+    `doSave=true`).
+
+```java
+try (ResourceResolver resolver = resolverFactory.getServiceResourceResolver(
+        Collections.singletonMap(ResourceResolverFactory.SUBSERVICE, "asset-admin-service"));
+     InputStream stream = bundleContext.getBundle().getResource(bundledPath).openStream()) {
+
+    AssetManager assetManager = resolver.adaptTo(AssetManager.class);
+    Asset asset = assetManager.createAsset(dest, stream, mimeType, true);
+    LOG.info("Seeded asset at {}", asset.getPath());
+
+} catch (LoginException e) {
+    LOG.error("Could not open service resolver for subservice 'asset-admin-service'", e);
+} catch (IOException e) {
+    LOG.error("Failed to read bundled asset {}", bundledPath, e);
+}
+```
+
+This is legitimate on AEMaaCS — it does not hit the removed binary APIs and does not accept
+arbitrary client uploads.
 
 ## C3: Update imports
 
-**Remove (when deprecated AssetManager usage is removed):**
+**Remove** (when `createAssetForBinary` / `getAssetForBinary` are removed):
+
 ```java
-import com.day.cq.dam.api.Asset;
-import com.day.cq.dam.api.AssetManager;
 import com.day.cq.dam.api.metadata.MetaDataMap;  // if only used for deprecated flow
 ```
 
-**Keep (if AssetManager still used for read-only operations):**
-```java
-import com.day.cq.dam.api.Asset;
-import com.day.cq.dam.api.AssetManager;
-```
+Keep `com.day.cq.dam.api.Asset` / `com.day.cq.dam.api.AssetManager` when `createAsset` /
+`getAsset` are still in use.
 
-**Add (for logging):**
-```java
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-```
+**Add** (for logging and OSGi DS):
 
-**Remove (Felix SCR, if migrated):**
-```java
-import org.apache.felix.scr.annotations.*;
-```
-
-**Add (OSGi DS, if migrated):**
 ```java
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.apache.sling.api.servlets.ServletResolverConstants;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import javax.servlet.Servlet;
 ```
 
+Remove Felix SCR imports per [scr-to-osgi-ds.md](scr-to-osgi-ds.md).
+
 ---
 
-# Validation
+## Validation
 
-- [ ] No `createAssetForBinary(binaryFilePath, doSave)` or `getAssetForBinary(binaryFilePath)` calls remain
-- [ ] No `createAsset(path, is, mimeType, overwrite)` calls remain
-- [ ] Direct Binary Access pattern documented or implemented (client-side `@adobe/aem-upload` or equivalent)
-- [ ] [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) satisfied for SCR, resolver, logging
-- [ ] InputStream resources closed in try-with-resources or `finally` (if any remain)
-- [ ] `@Reference` AssetManager removed if no longer needed for create flows
-- [ ] Code compiles: `mvn clean compile`
+- [ ] No `createAssetForBinary(` or `getAssetForBinary(` calls remain.
+- [ ] Client-facing upload endpoints moved to Direct Binary Access; any residual Java endpoint returns 410 Gone (or equivalent) with a documented replacement path.
+- [ ] `createAsset(path, InputStream, mimeType, overwrite)` only remains in in-JVM utilities where the stream is trusted and small; the stream is closed in try-with-resources.
+- [ ] Service-user resolver + `SUBSERVICE` used (Repoinit-provisioned) where `AssetManager.adaptTo` is still called.
+- [ ] [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) satisfied for SCR, resolver, logging.
+- [ ] No hardcoded credentials (`":password"`, literal bearer tokens) anywhere in the sample flow.
+- [ ] `@Reference AssetManager` removed if no longer needed.
+- [ ] Code compiles: `mvn clean compile`.

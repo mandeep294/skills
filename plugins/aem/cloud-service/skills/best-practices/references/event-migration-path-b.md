@@ -215,6 +215,9 @@ The `handleEvent()` method should ONLY:
 **Replication event example:**
 ```java
 // BEFORE (inline business logic in handler)
+private static final Map<String, Object> AUTH_INFO =
+        Collections.singletonMap(ResourceResolverFactory.SUBSERVICE, "replication-service");
+
 @Override
 public void handleEvent(Event event) {
     if (ReplicationEvent.fromEvent(event).getReplicationAction().getType().equals(ReplicationActionType.ACTIVATE)) {
@@ -223,7 +226,7 @@ public void handleEvent(Event event) {
             if (resource != null) {
                 ModifiableValueMap map = resource.adaptTo(ModifiableValueMap.class);
                 map.put("cq:lastReplicated", Calendar.getInstance());
-                resource.getResourceResolver().commit();
+                resourceResolver.commit();
             }
         } catch (LoginException | PersistenceException ex) {
             LOG.error("Error", ex);

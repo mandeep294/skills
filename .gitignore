@@ -18,3 +18,6 @@ dist/
 
 # Claude plugin config
 .claude-plugin/
+
+# OMC state
+.omc/

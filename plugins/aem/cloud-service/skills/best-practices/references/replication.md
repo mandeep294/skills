@@ -135,14 +135,22 @@ public class PropertyNodeReplicationService {
                 false,
                 propertyNodePath
             );
-            DistributionResponse distributionResponse = distributor.distribute("publish", resolver, distributionRequest);
+            DistributionResponse distributionResponse =
+                distributor.distribute("publish", resolver, distributionRequest);
 
-            LOG.info("Property Node Distribution successful for path: {}", propertyNodePath);
+            if (distributionResponse.isSuccessful()) {
+                LOG.info("Property node distribution queued for path: {}", propertyNodePath);
+            } else {
+                LOG.warn("Property node distribution not queued for path: {} (state={}, message={})",
+                        propertyNodePath,
+                        distributionResponse.getState(),
+                        distributionResponse.getMessage());
+            }
 
         } catch (LoginException e) {
-            LOG.error("Failed to get resource resolver", e);
-        } catch (Exception e) {
-            LOG.error("Error during distribution", e);
+            LOG.error("Could not open service resolver for subservice 'property-node-distribution-service'", e);
+        } catch (DistributionException e) {
+            LOG.error("Distribution failed for {}", propertyNodePath, e);
         }
     }
 }
@@ -244,27 +252,37 @@ public class ContentReplicationService {
                 false,
                 contentPath
             );
-            DistributionResponse distributionResponse = distributor.distribute("publish", resolver, distributionRequest);
-            LOG.info("Forward Distribution successful for path: {}", contentPath);
+            DistributionResponse distributionResponse =
+                distributor.distribute("publish", resolver, distributionRequest);
+
+            if (distributionResponse.isSuccessful()) {
+                LOG.info("Content distribution queued for path: {}", contentPath);
+            } else {
+                LOG.warn("Content distribution not queued for path: {} (state={}, message={})",
+                        contentPath,
+                        distributionResponse.getState(),
+                        distributionResponse.getMessage());
+            }
 
         } catch (LoginException e) {
-            LOG.error("Failed to get resource resolver", e);
-        } catch (Exception e) {
-            LOG.error("Error during distribution", e);
+            LOG.error("Could not open service resolver for subservice 'content-distribution-service'", e);
+        } catch (DistributionException e) {
+            LOG.error("Distribution failed for {}", contentPath, e);
         }
     }
 }
 ```
 
 **Key Changes:**
-- ✅ Replaced `Replicator`/`ReplicationAgent` → `Distributor`
-- ✅ Replaced `ReplicationAction`/`ReplicationResult` → `DistributionRequest`/`DistributionResponse`
-- ✅ Mapped `ReplicationActionType.ACTIVATE` → `DistributionRequestType.ADD`
-- ✅ Used correct `publish`/`preview` agent
-- ✅ Replaced `getAdministrativeResourceResolver()` → `getServiceResourceResolver()` with SUBSERVICE
-- ✅ Removed USER/PASSWORD from authInfo (Cloud Service uses SUBSERVICE only)
-- ✅ Replaced `System.out/err` → SLF4J Logger
-- ✅ Used try-with-resources for ResourceResolver
+- Replaced `Replicator` / `ReplicationAgent` → `Distributor`.
+- Replaced `ReplicationAction` / `ReplicationResult` → `DistributionRequest` / `DistributionResponse`.
+- Mapped `ReplicationActionType.ACTIVATE` → `DistributionRequestType.ADD`.
+- Targets the correct agent name (`publish` or `preview`) — legacy `Replicator.replicate` implicitly targeted every configured replication agent; `Distributor.distribute` is explicit.
+- Inspects `DistributionResponse.isSuccessful()` instead of assuming the call succeeded.
+- Replaced `getAdministrativeResourceResolver()` → `getServiceResourceResolver(SUBSERVICE)`.
+- Removed `USER` / `PASSWORD` from `authInfo` — AEM as a Cloud Service uses subservice mappings (Repoinit + `ServiceUserMapperImpl.amended`) only.
+- Replaced `System.out` / `System.err` / `printStackTrace` → SLF4J.
+- Resolver opened in try-with-resources.
 
 ---
 
@@ -360,18 +378,17 @@ import org.apache.felix.scr.annotations.*;  // must be gone when done
 import org.apache.sling.api.resource.LoginException;
 import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.api.resource.ResourceResolverFactory;
-import org.apache.sling.distribution.Distributor;
+import org.apache.sling.distribution.DistributionException;
 import org.apache.sling.distribution.DistributionRequest;
-import org.apache.sling.distribution.DistributionResponse;
 import org.apache.sling.distribution.DistributionRequestType;
+import org.apache.sling.distribution.DistributionResponse;
+import org.apache.sling.distribution.Distributor;
 import org.apache.sling.distribution.SimpleDistributionRequest;
-import org.osgi.framework.Constants;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.Collections;
-import java.util.Map;
 ```
 
 ---
@@ -380,10 +397,12 @@ import java.util.Map;
 
 ## Replication/Distribution Checklist
 
-- [ ] No `ReplicationAgent`, `Replicator`, `ReplicationAction`, or `ReplicationResult` remains
-- [ ] Uses `Distributor` (`org.apache.sling.distribution`)
-- [ ] Uses `SimpleDistributionRequest` with `DistributionRequestType` from `org.apache.sling.distribution`
-- [ ] Calls `distributor.distribute("publish", resolver, distributionRequest)` with the service-user resolver
-- [ ] [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) satisfied (SCR→DS, resolver/logging, auth maps)
-- [ ] `scheduler.concurrent=false` is set (if using scheduler)
-- [ ] Code compiles: `mvn clean compile`
+- [ ] No `ReplicationAgent`, `Replicator`, `ReplicationAction`, or `ReplicationResult` remains.
+- [ ] No imports from `com.day.cq.replication.*` or `org.apache.sling.replication.*` remain.
+- [ ] Uses `Distributor` (`org.apache.sling.distribution`).
+- [ ] Uses `SimpleDistributionRequest` with `DistributionRequestType` from `org.apache.sling.distribution`.
+- [ ] Calls `distributor.distribute("publish", resolver, distributionRequest)` with a service-user resolver (opened via `getServiceResourceResolver` with a `SUBSERVICE`, closed in try-with-resources).
+- [ ] Inspects `distributionResponse.isSuccessful()` (and `getState()` / `getMessage()` on failure) instead of assuming success.
+- [ ] Targets the correct agent — `"publish"` for live distribution, `"preview"` for the preview tier; both (in two calls) if you replicate to both tiers.
+- [ ] [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) satisfied (SCR → DS, service-user resolver, SLF4J, no `USER` / `PASSWORD` auth maps).
+- [ ] Code compiles: `mvn clean compile`.

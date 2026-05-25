@@ -1,44 +1,89 @@
-# Resource Change Listener / Event Listener Migration Pattern
+# Sling `ResourceChangeListener` (AEM as a Cloud Service)
 
-Migrates legacy JCR observation listeners and OSGi event handlers with inline business logic to Cloud Service compatible pattern: **lightweight EventHandler + Sling JobConsumer**.
+BPA pattern id: **`resourceChangeListener`**.
 
-**Source patterns handled:**
-- JCR `javax.jcr.observation.EventListener` with `onEvent(EventIterator)`
-- OSGi `org.osgi.service.event.EventHandler` with inline business logic in `handleEvent(Event)`
+Covers existing or newly authored `org.apache.sling.api.resource.observation.ResourceChangeListener`
+implementations and how they must be shaped for **AEM as a Cloud Service** — a lightweight listener
+that offloads all business logic to a Sling **`JobConsumer`**.
 
-**Target pattern:**
-- OSGi `EventHandler` (lightweight — receives event, creates Sling Job)
-- Sling `JobConsumer` (handles business logic asynchronously)
-
-**Before transformation steps:** [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md).
-
-## Classification
-
-No sub-paths — all source patterns transform to the same target (EventHandler + JobConsumer split).
-
-Identify which source pattern the file uses:
-- **JCR EventListener:** Has `implements EventListener`, `import javax.jcr.observation.*`, `onEvent(EventIterator)`
-- **OSGi EventHandler with inline logic:** Has `implements EventHandler`, `handleEvent(Event)`, and business logic (ResourceResolver, JCR Session, etc.) directly inside `handleEvent()`
-
-If the file already has `implements EventHandler` and already offloads to a Sling Job (i.e., `handleEvent()` only calls `jobManager.addJob()`), it may not need migration — verify and skip if already compliant.
-
-## Pattern-Specific Rules
-
-- **DO** convert JCR `EventListener` to OSGi `EventHandler`
-- **DO** offload ALL business logic from `handleEvent()` to a `JobConsumer`
-- **DO** keep `handleEvent()` lightweight — it should only extract event data and create a job
-- **DO** map JCR event types to OSGi resource event topics
-- **DO** preserve event filtering logic (paths, property names, event types)
-- **DO NOT** put ResourceResolver, JCR Session, or Node operations in the EventHandler
-- **DO NOT** change the business logic — move it as-is to the JobConsumer
+**Before transformation steps:** [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md)
+(SCR → OSGi DS, service-user resolvers, SLF4J).
 
 ---
 
-## Complete Example: Before and After
+## Why `ResourceChangeListener` is the target API
 
-### Example 1: JCR EventListener → OSGi EventHandler + JobConsumer
+On AEM as a Cloud Service, Sling **`ResourceChangeListener`** is the preferred API for reacting
+to repository changes:
 
-#### Before (Legacy JCR EventListener)
+- First-class Sling API with typed **`ResourceChange`** events and a typed **`ChangeType`** enum.
+- **Cluster-aware**: external (remote-node) vs local changes are flagged via `change.isExternal()`.
+- **Path-prefix** and **change-type** filtering are native OSGi component properties — no LDAP filter required.
+- No JCR `Session` handling in the listener itself.
+
+**Do not** use the following as a replacement:
+
+| Legacy / discouraged on AEMaaCS | Reason |
+|---------------------------------|--------|
+| `javax.jcr.observation.EventListener` (`onEvent(EventIterator)`) | Requires a `Session`, is not cluster-aware, not recommended by Adobe for AEMaaCS. Migrate to `ResourceChangeListener`. |
+| `org.osgi.service.event.EventHandler` subscribed to `org/apache/sling/api/resource/Resource/*` topics | The OSGi resource topics are an internal dispatcher detail and are deprecated as an application-facing API. Use `ResourceChangeListener` instead. |
+| `org.osgi.service.event.EventHandler` for **non-resource** topics (replication, workflow, custom) | Still valid — see [event-migration.md](event-migration.md). |
+
+## Decision table — which API for which event
+
+| Reacting to… | Use |
+|--------------|-----|
+| Resource (page/asset/property) added, changed, removed | **`ResourceChangeListener`** |
+| External (remote-node) change to content | **`ResourceChangeListener`** — implement **`ExternalResourceChangeListener`** |
+| Sling resource provider added/removed | **`ResourceChangeListener`** with `CHANGES=PROVIDER_ADDED/PROVIDER_REMOVED` |
+| Replication action (`com.day.cq.replication.ReplicationEvent.EVENT_TOPIC`) | OSGi `EventHandler` — see [event-migration.md](event-migration.md) |
+| Workflow completion (`com/adobe/granite/workflow/*`) | OSGi `EventHandler` — see [event-migration.md](event-migration.md) |
+| Custom OSGi Event Admin topic posted by another bundle | OSGi `EventHandler` — see [event-migration.md](event-migration.md) |
+| JCR-level events that `ResourceChangeListener` cannot express (rare) | **Avoid custom JCR listeners on AEMaaCS**; file an Adobe support case before adding one. |
+
+## `ResourceChangeListener` vs `ExternalResourceChangeListener`
+
+| Interface | Receives | When to use |
+|-----------|----------|-------------|
+| `ResourceChangeListener` | Only **local** changes (same JVM) | Most write-triggers (e.g. post-process what *this* pod just wrote) |
+| `ExternalResourceChangeListener` **extends** `ResourceChangeListener` | **Local** *and* **external** (cluster / replicated) changes | Cluster-wide reactions (e.g. cache invalidation on publish, replication follow-ups) |
+
+Choose based on whether the reaction must fire **on every node** when any node writes
+(`ExternalResourceChangeListener`), or **only where the write happened** (`ResourceChangeListener`).
+
+## Critical rules for Cloud Service
+
+- **Listener must be lightweight.** `onChange(List<ResourceChange>)` runs on a shared Sling thread;
+  blocking it delays **every other** registered listener. Do only:
+  1. Filter changes you care about (by path, `ChangeType`, or property names).
+  2. Extract the data you need (paths, user id, external flag).
+  3. Enqueue a Sling job via `JobManager.addJob(topic, props)`.
+- **Never** open a `ResourceResolver`, `Session`, or perform JCR / repository reads or writes inside `onChange`.
+- **Never** call `ResourceResolverFactory.getAdministrativeResourceResolver(...)` — replace with `getServiceResourceResolver(SUBSERVICE)` per [resource-resolver-logging.md](resource-resolver-logging.md). The resolver belongs in the **`JobConsumer`**, not the listener.
+- **Filter at registration, not in code.** Use the `paths`, `changes`, and (optionally) `propertyNamesHint`
+  OSGi properties so the Sling framework delivers only relevant events.
+- Business `@Reference` fields (`ResourceResolverFactory`, domain services) live on the **`JobConsumer`**.
+  Only `JobManager` lives on the listener.
+- Choose `ResourceChangeListener` vs `ExternalResourceChangeListener` **deliberately** — see the table above.
+- Paths **must** start with `/` (e.g. `/content/dam`). A leading `glob:` or a path with `.` globs is allowed — see the Sling API Javadoc.
+- On AEMaaCS, service-user mappings referenced via `SUBSERVICE` must be provisioned in **Repoinit**; creating users through the UI is not available. See [resource-resolver-logging.md](resource-resolver-logging.md).
+
+---
+
+## Classification
+
+1. **File already implements `ResourceChangeListener`** and `onChange` contains business logic
+   (resolver acquire, JCR/Session ops, heavy processing) → **apply steps R1–R5** below.
+2. **File implements `ResourceChangeListener`** and `onChange` only enqueues jobs → **already compliant**; verify only.
+3. **File implements `javax.jcr.observation.EventListener`** or **`org.osgi.service.event.EventHandler`
+   subscribed to `org/apache/sling/api/resource/Resource/*`** → **this module still applies** (new target is `ResourceChangeListener`); apply **R0** (convert to `ResourceChangeListener`) then R1–R5. For
+   non-resource `EventHandler` topics (ReplicationEvent, WorkflowEvent, custom) use [event-migration.md](event-migration.md) instead.
+
+---
+
+## Complete example — before and after
+
+### Before (legacy JCR `EventListener` with inline logic and admin resolver)
 
 ```java
 package com.example.listeners;
@@ -52,96 +97,94 @@ import org.apache.sling.api.resource.ResourceResolverFactory;
 import javax.jcr.observation.Event;
 import javax.jcr.observation.EventIterator;
 import javax.jcr.observation.EventListener;
-import java.util.Calendar;
 
 @Component(immediate = true)
 @Service
-public class ACLModificationListener implements EventListener {
+public class ACLPolicyListener implements EventListener {
 
     @Reference
-    private ResourceResolverFactory resourceResolverFactory;
+    private ResourceResolverFactory resolverFactory;
 
     @Override
     public void onEvent(EventIterator events) {
         try {
-            ResourceResolver resolver = resourceResolverFactory.getAdministrativeResourceResolver(null);
-            if (resolver != null) {
-                while (events.hasNext()) {
-                    Event event = events.nextEvent();
-                    if (event.getType() == Event.PROPERTY_CHANGED) {
-                        String path = event.getPath();
-                        if (path.contains("/rep:policy")) {
-                            // Business logic: update replication date
-                            System.out.println("ACL modified at: " + path);
-                            // ... update replication date logic ...
-                        }
-                    }
+            ResourceResolver resolver = resolverFactory.getAdministrativeResourceResolver(null);
+            while (events.hasNext()) {
+                Event event = events.nextEvent();
+                if (event.getType() == Event.PROPERTY_CHANGED
+                        && event.getPath().contains("/rep:policy")) {
+                    // heavy work: recompute ACL audit record, replicate, etc.
+                    System.out.println("ACL modified: " + event.getPath());
                 }
-                resolver.close();
             }
+            resolver.close();
         } catch (Exception e) {
-            System.err.println("Error handling ACL modification: " + e.getMessage());
+            System.err.println("ACL listener failed: " + e.getMessage());
             e.printStackTrace();
         }
     }
 }
 ```
 
-#### After (Cloud Service Compatible)
+### After — Cloud Service compatible
 
-**File 1: ACLModificationEventHandler.java** (EventHandler)
+**File 1 — `ACLPolicyChangeListener.java`** (lightweight `ResourceChangeListener`)
 
 ```java
 package com.example.listeners;
 
-import org.apache.sling.api.resource.Resource;
+import org.apache.sling.api.resource.observation.ResourceChange;
+import org.apache.sling.api.resource.observation.ResourceChangeListener;
+import org.apache.sling.event.jobs.JobManager;
 import org.osgi.framework.Constants;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.event.Event;
-import org.osgi.service.event.EventConstants;
-import org.osgi.service.event.EventHandler;
-import org.apache.sling.event.jobs.JobManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Component(
-    service = EventHandler.class,
-    immediate = true,
-    property = {
-        Constants.SERVICE_DESCRIPTION + "=Event Handler for ACL modifications",
-        EventConstants.EVENT_TOPIC + "=org/apache/sling/api/resource/Resource/CHANGED",
-        EventConstants.EVENT_FILTER + "=(path=/*/rep:policy)"
-    }
+        service = ResourceChangeListener.class,
+        property = {
+                Constants.SERVICE_DESCRIPTION + "=ACL policy change listener",
+                ResourceChangeListener.PATHS + "=glob:/**/rep:policy",
+                ResourceChangeListener.CHANGES + "=ADDED",
+                ResourceChangeListener.CHANGES + "=CHANGED",
+                ResourceChangeListener.CHANGES + "=REMOVED"
+        }
 )
-public class ACLModificationEventHandler implements EventHandler {
+public class ACLPolicyChangeListener implements ResourceChangeListener {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ACLModificationEventHandler.class);
-    private static final String JOB_TOPIC = "com/example/acl/modification/job";
+    private static final Logger LOG = LoggerFactory.getLogger(ACLPolicyChangeListener.class);
+    static final String JOB_TOPIC = "com/example/acl/policy/changed";
 
     @Reference
     private JobManager jobManager;
 
     @Override
-    public void handleEvent(Event event) {
-        try {
-            String path = (String) event.getProperty("path");
-            LOG.debug("Resource event: {} for path: {}", event.getTopic(), path);
-
-            Map<String, Object> jobProperties = new HashMap<>();
-            jobProperties.put("path", path);
-            jobManager.addJob(JOB_TOPIC, jobProperties);
-        } catch (Exception e) {
-            LOG.error("Error handling event", e);
+    public void onChange(List<ResourceChange> changes) {
+        for (ResourceChange change : changes) {
+            try {
+                Map<String, Object> props = new HashMap<>();
+                props.put("path", change.getPath());
+                props.put("type", change.getType().name());
+                props.put("external", change.isExternal());
+                if (change.getUserId() != null) {
+                    props.put("userId", change.getUserId());
+                }
+                jobManager.addJob(JOB_TOPIC, props);
+            } catch (Exception e) {
+                LOG.error("Failed to enqueue ACL change job for {}", change.getPath(), e);
+            }
         }
     }
 }
 ```
 
-**File 2: ACLModificationJobConsumer.java** (JobConsumer)
+**File 2 — `ACLPolicyJobConsumer.java`** (business logic runs here, with a service-user resolver)
 
 ```java
 package com.example.listeners;
@@ -151,7 +194,6 @@ import org.apache.sling.api.resource.ResourceResolver;
 import org.apache.sling.api.resource.ResourceResolverFactory;
 import org.apache.sling.event.jobs.Job;
 import org.apache.sling.event.jobs.consumer.JobConsumer;
-import org.apache.sling.event.jobs.consumer.JobResult;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
@@ -160,500 +202,261 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 
 @Component(
-    service = JobConsumer.class,
-    immediate = true,
-    property = {
-        JobConsumer.PROPERTY_TOPICS + "=" + "com/example/acl/modification/job"
-    }
+        service = JobConsumer.class,
+        property = {
+                JobConsumer.PROPERTY_TOPICS + "=com/example/acl/policy/changed"
+        }
 )
-public class ACLModificationJobConsumer implements JobConsumer {
+public class ACLPolicyJobConsumer implements JobConsumer {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ACLModificationJobConsumer.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ACLPolicyJobConsumer.class);
 
     @Reference
     private ResourceResolverFactory resolverFactory;
 
     @Override
     public JobResult process(final Job job) {
-        String path = (String) job.getProperty("path");
-        LOG.info("Processing ACL modification job for path: {}", path);
+        final String path = job.getProperty("path", String.class);
+        final String type = job.getProperty("type", String.class);
 
         try (ResourceResolver resolver = resolverFactory.getServiceResourceResolver(
-                Collections.singletonMap(ResourceResolverFactory.SUBSERVICE, "event-handler-service"))) {
+                Collections.singletonMap(ResourceResolverFactory.SUBSERVICE, "acl-audit-service"))) {
 
-            if (resolver == null) {
-                LOG.warn("Could not acquire resource resolver");
-                return JobResult.FAILED;
-            }
-
-            // Business logic: update replication date
-            LOG.info("ACL modified at: {}", path);
-            // ... existing business logic from onEvent() goes here ...
+            // ==== existing business logic from onEvent() moves here ====
+            LOG.info("Processing ACL {} at {}", type, path);
+            // read resource, update audit record, etc.
 
             return JobResult.OK;
-
         } catch (LoginException e) {
-            LOG.error("Failed to get resource resolver", e);
+            LOG.error("Could not open service resolver for subservice 'acl-audit-service'", e);
             return JobResult.FAILED;
         } catch (Exception e) {
-            LOG.error("Error processing job", e);
+            LOG.error("ACL policy job failed for {}", path, e);
             return JobResult.FAILED;
         }
     }
 }
 ```
 
-### Example 2: OSGi EventHandler with Inline Logic → Lightweight EventHandler + JobConsumer
+**Required Repoinit** (provision the service user and ACLs — goes in your `ui.config` Repoinit OSGi config):
 
-#### Before (Legacy OSGi EventHandler with Inline Logic)
+```
+create service user acl-audit-service
 
-```java
-package com.example.listeners;
-
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.sling.api.resource.LoginException;
-import org.apache.sling.api.resource.ResourceResolver;
-import org.apache.sling.api.resource.ResourceResolverFactory;
-import org.osgi.service.event.Event;
-import org.osgi.service.event.EventConstants;
-import org.osgi.service.event.EventHandler;
-
-import java.util.Calendar;
-import java.util.Collections;
-
-@Component(
-    immediate = true,
-    property = {
-        EventConstants.EVENT_TOPIC + "=org/apache/sling/api/resource/Resource/CHANGED"
-    }
-)
-public class ReplicationDateEventHandler implements EventHandler {
-
-    @Reference
-    private ResourceResolverFactory resourceResolverFactory;
-
-    @Override
-    public void handleEvent(Event event) {
-        String path = (String) event.getProperty("path");
-        try {
-            ResourceResolver resolver = resourceResolverFactory.getServiceResourceResolver(
-                Collections.singletonMap(ResourceResolverFactory.SUBSERVICE, "replication-service"));
-            
-            if (resolver != null) {
-                // Business logic: update replication date
-                Resource resource = resolver.getResource(path + "/jcr:content");
-                if (resource != null) {
-                    ModifiableValueMap map = resource.adaptTo(ModifiableValueMap.class);
-                    map.put("cq:lastReplicated", Calendar.getInstance());
-                    resolver.commit();
-                }
-                resolver.close();
-            }
-        } catch (Exception e) {
-            System.err.println("Error updating replication date: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-}
+set ACL for acl-audit-service
+    allow jcr:read on /content
+    allow jcr:read,rep:write on /var/acl-audit
+end
 ```
 
-#### After (Cloud Service Compatible)
+**Required service-user mapping** (`ui.config`, file named e.g.
+`org.apache.sling.serviceusermapping.impl.ServiceUserMapperImpl.amended-acl-audit.cfg.json`):
 
-**File 1: ReplicationDateEventHandler.java** (Lightweight EventHandler)
-
-```java
-package com.example.listeners;
-
-import org.osgi.framework.Constants;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Reference;
-import org.osgi.service.event.Event;
-import org.osgi.service.event.EventConstants;
-import org.osgi.service.event.EventHandler;
-import org.apache.sling.event.jobs.JobManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.HashMap;
-import java.util.Map;
-
-@Component(
-    service = EventHandler.class,
-    immediate = true,
-    property = {
-        Constants.SERVICE_DESCRIPTION + "=Event Handler for replication date updates",
-        EventConstants.EVENT_TOPIC + "=org/apache/sling/api/resource/Resource/CHANGED"
-    }
-)
-public class ReplicationDateEventHandler implements EventHandler {
-
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationDateEventHandler.class);
-    private static final String JOB_TOPIC = "com/example/replication/date/update";
-
-    @Reference
-    private JobManager jobManager;
-
-    @Override
-    public void handleEvent(Event event) {
-        try {
-            String path = (String) event.getProperty("path");
-            LOG.debug("Resource event: {} for path: {}", event.getTopic(), path);
-
-            Map<String, Object> jobProperties = new HashMap<>();
-            jobProperties.put("path", path);
-            jobManager.addJob(JOB_TOPIC, jobProperties);
-        } catch (Exception e) {
-            LOG.error("Error handling event", e);
-        }
-    }
+```json
+{
+  "user.mapping": [
+    "com.example.mybundle:acl-audit-service=[acl-audit-service]"
+  ]
 }
 ```
-
-**File 2: ReplicationDateJobConsumer.java** (JobConsumer)
-
-```java
-package com.example.listeners;
-
-import org.apache.sling.api.resource.LoginException;
-import org.apache.sling.api.resource.ModifiableValueMap;
-import org.apache.sling.api.resource.Resource;
-import org.apache.sling.api.resource.ResourceResolver;
-import org.apache.sling.api.resource.ResourceResolverFactory;
-import org.apache.sling.api.resource.PersistenceException;
-import org.apache.sling.event.jobs.Job;
-import org.apache.sling.event.jobs.consumer.JobConsumer;
-import org.apache.sling.event.jobs.consumer.JobResult;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Reference;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.Calendar;
-import java.util.Collections;
-
-@Component(
-    service = JobConsumer.class,
-    immediate = true,
-    property = {
-        JobConsumer.PROPERTY_TOPICS + "=" + "com/example/replication/date/update"
-    }
-)
-public class ReplicationDateJobConsumer implements JobConsumer {
-
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationDateJobConsumer.class);
-
-    @Reference
-    private ResourceResolverFactory resolverFactory;
-
-    @Override
-    public JobResult process(final Job job) {
-        String path = (String) job.getProperty("path");
-        LOG.info("Processing replication date update job for path: {}", path);
-
-        try (ResourceResolver resolver = resolverFactory.getServiceResourceResolver(
-                Collections.singletonMap(ResourceResolverFactory.SUBSERVICE, "event-handler-service"))) {
-
-            if (resolver == null) {
-                LOG.warn("Could not acquire resource resolver");
-                return JobResult.FAILED;
-            }
-
-            // Business logic: update replication date
-            Resource resource = resolver.getResource(path + "/jcr:content");
-            if (resource != null) {
-                ModifiableValueMap map = resource.adaptTo(ModifiableValueMap.class);
-                map.put("cq:lastReplicated", Calendar.getInstance());
-                resolver.commit();
-                LOG.debug("Updated replication date for: {}", path);
-            }
-
-            return JobResult.OK;
-
-        } catch (LoginException e) {
-            LOG.error("Failed to get resource resolver", e);
-            return JobResult.FAILED;
-        } catch (PersistenceException e) {
-            LOG.error("Failed to commit changes", e);
-            return JobResult.FAILED;
-        } catch (Exception e) {
-            LOG.error("Error processing job", e);
-            return JobResult.FAILED;
-        }
-    }
-}
-```
-
-**Key Changes:**
-- ✅ Converted JCR `EventListener` → OSGi `EventHandler` (Example 1)
-- ✅ Split EventHandler + JobConsumer (both examples)
-- ✅ EventHandler is lightweight — only creates jobs
-- ✅ Business logic moved to JobConsumer `process()` method
-- ✅ Replaced `getAdministrativeResourceResolver()` → `getServiceResourceResolver()` with SUBSERVICE
-- ✅ Replaced `System.out/err` → SLF4J Logger
-- ✅ Event topics correctly mapped (JCR → OSGi)
-- ✅ Preserved business logic unchanged
 
 ---
 
-# Transformation Steps
+## Transformation steps
 
-## Pattern prerequisites
+### R0 — (only if source is JCR `EventListener` or resource-topic OSGi `EventHandler`) convert to `ResourceChangeListener`
 
-Read [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) before the steps below.
-
-## R1: Convert JCR EventListener to OSGi EventHandler (if applicable)
-
-**Skip this step if the file already implements `EventHandler`.**
-
-If the file implements JCR `EventListener`, convert to OSGi `EventHandler`:
+Replace the legacy registration/implementation scaffolding with an OSGi DS
+`ResourceChangeListener` component:
 
 ```java
-// BEFORE (JCR Observation)
-import javax.jcr.observation.Event;
-import javax.jcr.observation.EventListener;
-import javax.jcr.observation.EventIterator;
-
-public class ACLModificationListener implements EventListener {
-    @Override
-    public void onEvent(EventIterator events) {
-        while (events.hasNext()) {
-            Event event = events.nextEvent();
-            if (event.getType() == Event.PROPERTY_CHANGED) {
-                String path = event.getPath();
-                // business logic...
-            }
-        }
-    }
-}
-
-// AFTER (OSGi EventHandler — lightweight)
-import org.osgi.service.event.Event;
-import org.osgi.service.event.EventHandler;
-import org.osgi.service.event.EventConstants;
-
-@Component(service = EventHandler.class, immediate = true, property = {
-    Constants.SERVICE_DESCRIPTION + "=Event Handler for ACL modifications",
-    EventConstants.EVENT_TOPIC + "=org/apache/sling/api/resource/Resource/CHANGED",
-    EventConstants.EVENT_FILTER + "=(path=/*/rep:policy)"
-})
-public class ACLModificationEventHandler implements EventHandler {
-    @Reference
-    private JobManager jobManager;
-
-    @Override
-    public void handleEvent(Event event) {
-        String path = (String) event.getProperty("path");
-        // offload to job (business logic goes to JobConsumer)
-    }
-}
-```
-
-**JCR event type to OSGi resource topic mapping:**
-
-| JCR Event Type | OSGi Resource Event Topic |
-|---------------|--------------------------|
-| `Event.NODE_ADDED` | `org/apache/sling/api/resource/Resource/ADDED` |
-| `Event.NODE_REMOVED` | `org/apache/sling/api/resource/Resource/REMOVED` |
-| `Event.PROPERTY_CHANGED` | `org/apache/sling/api/resource/Resource/CHANGED` |
-| `Event.PROPERTY_ADDED` | `org/apache/sling/api/resource/Resource/CHANGED` |
-| `Event.PROPERTY_REMOVED` | `org/apache/sling/api/resource/Resource/CHANGED` |
-
-**JCR event data to OSGi event property mapping:**
-
-| JCR Event API | OSGi Event API |
-|--------------|----------------|
-| `event.getPath()` | `(String) event.getProperty("path")` |
-| `event.getIdentifier()` | `(String) event.getProperty("resourceType")` |
-| `event.getType()` | Determined by topic (no need to check type) |
-
-## R2: Make EventHandler lightweight — offload to Sling Job
-
-The `handleEvent()` method should ONLY:
-1. Extract event data (path, properties, etc.)
-2. Create a Sling Job with those properties
-3. Return immediately
-
-**Move ALL business logic out of handleEvent():**
-
-```java
-// BEFORE (inline business logic in handler)
-@Override
-public void handleEvent(Event event) {
-    String path = (String) event.getProperty("path");
-    try (ResourceResolver resolver = resourceResolverFactory.getServiceResourceResolver(AUTH_INFO)) {
-        Resource resource = resolver.getResource(path + "/jcr:content");
-        if (resource != null) {
-            ModifiableValueMap map = resource.adaptTo(ModifiableValueMap.class);
-            map.put("cq:lastReplicated", Calendar.getInstance());
-            resolver.commit();
-        }
-    } catch (LoginException | PersistenceException ex) {
-        LOG.error("Error", ex);
-    }
-}
-
-// AFTER (lightweight — just creates a job)
-@Override
-public void handleEvent(Event event) {
-    try {
-        String path = ReplicationEvent.fromEvent(event).getReplicationAction().getPath();
-        LOG.debug("Resource event: {} for path: {}", event.getTopic(), path);
-
-        Map<String, Object> jobProperties = new HashMap<>();
-        jobProperties.put("path", path);
-        jobManager.addJob(JOB_TOPIC, jobProperties);
-    } catch (Exception e) {
-        LOG.error("Error handling event", e);
-    }
-}
-```
-
-**Add JobManager injection:**
-```java
-@Reference
-private JobManager jobManager;
-
-private static final String JOB_TOPIC = "com/example/acl/modification/job";
-```
-
-**Remove ResourceResolverFactory from EventHandler** — it moves to the JobConsumer.
-
-## R3: Create the JobConsumer class
-
-Create a NEW class that implements `JobConsumer` to handle the business logic:
-
-```java
-package com.example.listeners;
-
-import org.apache.sling.api.resource.LoginException;
-import org.apache.sling.api.resource.ResourceResolver;
-import org.apache.sling.api.resource.ResourceResolverFactory;
-import org.apache.sling.event.jobs.Job;
-import org.apache.sling.event.jobs.consumer.JobConsumer;
-import org.osgi.service.component.annotations.Component;
-import org.osgi.service.component.annotations.Reference;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import java.util.Collections;
-
+// AFTER
 @Component(
-    service = JobConsumer.class,
-    immediate = true,
-    property = {
-        JobConsumer.PROPERTY_TOPICS + "=" + "com/example/acl/modification/job"
-    }
+        service = ResourceChangeListener.class,
+        property = {
+                ResourceChangeListener.PATHS   + "=/content/dam",
+                ResourceChangeListener.CHANGES + "=ADDED",
+                ResourceChangeListener.CHANGES + "=CHANGED",
+                ResourceChangeListener.CHANGES + "=REMOVED"
+        }
 )
-public class ACLModificationJobConsumer implements JobConsumer {
+public class MyChangeListener implements ResourceChangeListener {
+    @Override
+    public void onChange(List<ResourceChange> changes) { /* enqueue jobs */ }
+}
+```
 
-    private static final Logger LOG = LoggerFactory.getLogger(ACLModificationJobConsumer.class);
+**Filter options** (OSGi component properties — use the constants on `ResourceChangeListener`):
+
+| Property | Purpose | Values |
+|----------|---------|--------|
+| `ResourceChangeListener.PATHS` | Path prefixes or globs to observe | `/content/dam`, `glob:/**/jcr:content/*`, `.` (all) |
+| `ResourceChangeListener.CHANGES` | Change types | `ADDED`, `CHANGED`, `REMOVED`, `PROVIDER_ADDED`, `PROVIDER_REMOVED` |
+| `ResourceChangeListener.PROPERTY_NAMES_HINT` | Hint: only these property names are relevant for CHANGED events | `cq:lastReplicated`, `status` |
+
+**Legacy JCR event type → `ChangeType` mapping:**
+
+| JCR (`javax.jcr.observation.Event.*`) | `ResourceChange.ChangeType` |
+|---------------------------------------|-----------------------------|
+| `NODE_ADDED` | `ADDED` |
+| `NODE_REMOVED` | `REMOVED` |
+| `PROPERTY_ADDED` | `CHANGED` |
+| `PROPERTY_CHANGED` | `CHANGED` |
+| `PROPERTY_REMOVED` | `CHANGED` |
+| `NODE_MOVED` | Expressed as `REMOVED` + `ADDED` |
+
+**Legacy JCR `Event` → `ResourceChange` data:**
+
+| JCR | `ResourceChange` |
+|-----|------------------|
+| `event.getPath()` | `change.getPath()` |
+| `event.getType()` | `change.getType()` |
+| `event.getUserID()` | `change.getUserId()` |
+| `event.getInfo()` / heuristics for clustered events | `change.isExternal()` |
+| `event.getIdentifier()` | Not directly available — use path + `getAddedPropertyNames()` / `getChangedPropertyNames()` / `getRemovedPropertyNames()` for property-level detail |
+
+### R1 — Keep `onChange` lightweight; offload to Sling Job
+
+`onChange` must only:
+
+1. Inspect each `ResourceChange` for path, type, and (optionally) property names.
+2. Build a job `Map<String, Object>`.
+3. Call `jobManager.addJob(JOB_TOPIC, props)`.
+4. Return.
+
+Do **not** open resolvers, call `adaptTo(Session.class)`, read child resources, or do I/O here.
+
+```java
+@Override
+public void onChange(List<ResourceChange> changes) {
+    for (ResourceChange change : changes) {
+        Map<String, Object> props = new HashMap<>();
+        props.put("path", change.getPath());
+        props.put("type", change.getType().name());
+        props.put("external", change.isExternal());
+        jobManager.addJob(JOB_TOPIC, props);
+    }
+}
+```
+
+### R2 — Create the `JobConsumer` (business logic)
+
+Create a **new** class that moves *all* the business logic from the legacy `onEvent` / inline
+`handleEvent` / heavy `onChange` into `process(Job)`:
+
+```java
+@Component(
+        service = JobConsumer.class,
+        property = {
+                JobConsumer.PROPERTY_TOPICS + "=com/example/your/topic"
+        }
+)
+public class YourJobConsumer implements JobConsumer {
+
+    private static final Logger LOG = LoggerFactory.getLogger(YourJobConsumer.class);
 
     @Reference
     private ResourceResolverFactory resolverFactory;
 
     @Override
     public JobResult process(final Job job) {
-        String path = (String) job.getProperty("path");
-        LOG.info("Processing job for path: {}", path);
+        final String path = job.getProperty("path", String.class);
 
         try (ResourceResolver resolver = resolverFactory.getServiceResourceResolver(
-                Collections.singletonMap(ResourceResolverFactory.SUBSERVICE, "event-handler-service"))) {
-
-            if (resolver == null) {
-                LOG.warn("Could not acquire resource resolver");
-                return JobResult.FAILED;
-            }
-
-            // === EXISTING BUSINESS LOGIC FROM onEvent()/handleEvent() GOES HERE ===
-
+                Collections.singletonMap(ResourceResolverFactory.SUBSERVICE, "my-service-user"))) {
+            // business logic
             return JobResult.OK;
-
         } catch (LoginException e) {
-            LOG.error("Failed to get resource resolver", e);
-            return JobResult.FAILED;
-        } catch (Exception e) {
-            LOG.error("Error processing job", e);
+            LOG.error("Could not open service resolver for 'my-service-user'", e);
             return JobResult.FAILED;
         }
     }
 }
 ```
 
-**Key rules for JobConsumer:**
-- Job topic MUST match the topic used in the EventHandler
-- Move ALL business logic from `onEvent()`/`handleEvent()` into `process(Job)`
-- Move business-logic `@Reference` fields here (e.g., `ResourceResolverFactory`)
-- Extract job properties via `job.getProperty("key")` or `(Type) job.getProperty("key")`
-- Return `JobResult.OK` on success, `JobResult.FAILED` on failure
-- Resolver + logging per [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md)
+Rules:
 
-## R4: Add TopologyEventListener for leader election (if applicable)
+- Topic on the `JobConsumer` component **must** match the topic used in `jobManager.addJob`.
+- Move **all** business `@Reference` fields (`ResourceResolverFactory`, domain services, etc.) to the `JobConsumer`.
+- Extract job data via `job.getProperty("key", Type.class)` — **do not** use the deprecated `JobUtil.getProperty(...)`.
+- Return `JobResult.OK` on success, `JobResult.FAILED` on failure (will be retried per the queue config), `JobResult.CANCEL` for unrecoverable failures.
 
-If the event handler should only run on one instance in a cluster (e.g., replication handlers), add `TopologyEventListener`:
+### R3 — Deciding between `ResourceChangeListener` and `ExternalResourceChangeListener`
+
+Default to **`ResourceChangeListener`** (local only). Use
+`ExternalResourceChangeListener` **only** if the reaction must run even for changes that happened
+on a different cluster node (e.g. a publish tier reacting to a replicated update).
 
 ```java
-@Component(service = { EventHandler.class, TopologyEventListener.class }, immediate = true, property = {
-    EventConstants.EVENT_TOPIC + "=" + ReplicationEvent.EVENT_TOPIC
-})
-public class PublishDateEventHandler implements EventHandler, TopologyEventListener {
+import org.apache.sling.api.resource.observation.ExternalResourceChangeListener;
 
-    private volatile boolean isLeader = false;
-
-    @Override
-    public void handleTopologyEvent(TopologyEvent event) {
-        if (event.getType() == TopologyEvent.Type.TOPOLOGY_CHANGED
-                || event.getType() == TopologyEvent.Type.TOPOLOGY_INIT) {
-            isLeader = event.getNewView().getLocalInstance().isLeader();
+@Component(
+        service = ExternalResourceChangeListener.class,
+        property = {
+                ResourceChangeListener.PATHS   + "=/content",
+                ResourceChangeListener.CHANGES + "=CHANGED"
         }
-    }
-
+)
+public class PublishedContentListener implements ExternalResourceChangeListener {
     @Override
-    public void handleEvent(Event event) {
-        if (isLeader) {
-            // create job...
-        }
-    }
+    public void onChange(List<ResourceChange> changes) { /* ... */ }
 }
 ```
 
-**Only add this if:**
-- The handler processes replication events
-- The handler should only fire on one node in the cluster
-- The original code had leader-check logic
+`ExternalResourceChangeListener` **extends** `ResourceChangeListener`; both interfaces expose the same `onChange`.
 
-## R5: Update imports
+Inside `onChange`, you can still branch on origin:
 
-**EventHandler class — Remove:**
+```java
+if (change.isExternal()) {
+    // happened elsewhere in the cluster
+}
+```
+
+### R4 — Update imports
+
+**Remove** (when source was JCR `EventListener`):
+
 ```java
 import javax.jcr.observation.Event;
-import javax.jcr.observation.EventListener;
 import javax.jcr.observation.EventIterator;
+import javax.jcr.observation.EventListener;
+```
+
+**Remove** (when source was `EventHandler` on `org/apache/sling/api/resource/Resource/*`):
+
+```java
+import org.osgi.service.event.Event;
+import org.osgi.service.event.EventConstants;
+import org.osgi.service.event.EventHandler;
+```
+
+**Remove** (SCR → DS per [scr-to-osgi-ds.md](scr-to-osgi-ds.md)):
+
+```java
 import org.apache.felix.scr.annotations.*;
-import org.apache.sling.api.resource.ResourceResolverFactory;  // moves to JobConsumer
 ```
 
-**EventHandler class — Add:**
+**Add** — listener class:
+
 ```java
-import org.osgi.service.event.Event;
-import org.osgi.service.event.EventConstants;
-import org.osgi.service.event.EventHandler;
+import org.apache.sling.api.resource.observation.ResourceChange;
+import org.apache.sling.api.resource.observation.ResourceChangeListener;
+// If reacting to external changes too:
+import org.apache.sling.api.resource.observation.ExternalResourceChangeListener;
+import org.apache.sling.event.jobs.JobManager;
 import org.osgi.framework.Constants;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
-import org.apache.sling.event.jobs.JobManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 ```
 
-**If using TopologyEventListener, also add:**
-```java
-import org.apache.sling.discovery.TopologyEvent;
-import org.apache.sling.discovery.TopologyEventListener;
-```
+**Add** — job consumer class:
 
-**JobConsumer class — Add:**
 ```java
 import org.apache.sling.api.resource.LoginException;
 import org.apache.sling.api.resource.ResourceResolver;
@@ -667,29 +470,69 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 ```
 
+### R5 — Repoinit and service-user mapping (must be in `ui.config`)
+
+The `JobConsumer` acquires a resolver via `SUBSERVICE`. On AEM as a Cloud Service, the backing
+system user **must** be created through **Repoinit** (the `repo-init` OSGi factory config) and
+mapped through `ServiceUserMapperImpl.amended`. The classic UI-based user admin is not available.
+
+```
+create service user my-service-user
+
+set ACL for my-service-user
+    allow jcr:read on /content
+    allow jcr:read,rep:write on /var/my-app
+end
+```
+
+`org.apache.sling.serviceusermapping.impl.ServiceUserMapperImpl.amended-<bundle>.cfg.json`:
+
+```json
+{
+  "user.mapping": [
+    "com.example.mybundle:my-service-user=[my-service-user]"
+  ]
+}
+```
+
+See [resource-resolver-logging.md](resource-resolver-logging.md) for the full Repoinit workflow.
+
 ---
 
-# Validation
+## Validation checklist
 
-## EventHandler Checklist
+**Listener class**
 
-- [ ] No `import javax.jcr.observation.*` remains (if converted from JCR EventListener)
-- [ ] SCR→DS per [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md)
-- [ ] No business logic in `handleEvent()` — only event data extraction + job creation
-- [ ] No `ResourceResolver`, `Session`, or `Node` operations in `handleEvent()`
-- [ ] `@Component(service = EventHandler.class, property = { EVENT_TOPIC... })` is present
-- [ ] `@Reference JobManager` is present
-- [ ] `jobManager.addJob(TOPIC, properties)` is called
-- [ ] Event topics are correctly mapped (JCR → OSGi)
-- [ ] Event filtering preserves original filter logic (paths, types)
-- [ ] Logging per [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md)
+- [ ] Implements `org.apache.sling.api.resource.observation.ResourceChangeListener`
+      (or `ExternalResourceChangeListener` if external changes are needed — justified in a code comment).
+- [ ] Component registers via `@Component(service = ResourceChangeListener.class, property = { PATHS..., CHANGES... })`.
+- [ ] No `import javax.jcr.observation.*` remains.
+- [ ] No OSGi resource-topic `EventHandler` subscription remains (`org/apache/sling/api/resource/Resource/*`).
+- [ ] No `ResourceResolverFactory`, `ResourceResolver`, `Session`, or `Node` operation inside `onChange`.
+- [ ] `onChange` body only extracts data and calls `jobManager.addJob(...)`.
+- [ ] `@Reference JobManager` present; business `@Reference` fields moved to the `JobConsumer`.
+- [ ] SLF4J used (no `System.out` / `System.err` / `printStackTrace`).
+- [ ] SCR → DS complete — no `org.apache.felix.scr.annotations.*` imports.
 
-## JobConsumer Checklist
+**`JobConsumer` class**
 
-- [ ] Implements `JobConsumer`
-- [ ] Has `@Component(service = JobConsumer.class, property = { PROPERTY_TOPICS... })`
-- [ ] Job topic matches the EventHandler topic
-- [ ] Business logic from original `onEvent()`/`handleEvent()` is preserved
-- [ ] Returns `JobResult.OK` or `JobResult.FAILED`
-- [ ] Resolver + logging per [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md)
-- [ ] Code compiles: `mvn clean compile`
+- [ ] Implements `JobConsumer`.
+- [ ] `@Component(service = JobConsumer.class, property = { PROPERTY_TOPICS = ... })` with the **same** topic used by the listener.
+- [ ] Resolver opened via `getServiceResourceResolver` with a `SUBSERVICE` mapping, in try-with-resources.
+- [ ] All business logic from the legacy listener lives here.
+- [ ] Extracts job data via `job.getProperty(..., Type.class)` — not `JobUtil.getProperty`.
+- [ ] Returns `JobResult.OK` / `FAILED` / `CANCEL`; never swallows errors.
+
+**Configuration**
+
+- [ ] Service user created via Repoinit in `ui.config`.
+- [ ] `ServiceUserMapperImpl.amended-*.cfg.json` maps `<bundle>:<subservice>` → the service user.
+- [ ] `mvn clean install` succeeds and produces no SCR-related or deprecated-API warnings.
+
+---
+
+## See also
+
+- [event-migration.md](event-migration.md) — for non-resource OSGi Event Admin handlers (replication, workflow, custom topics).
+- [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) — SCR → DS, service-user resolvers, SLF4J.
+- [`../SKILL.md`](../SKILL.md) — pattern index.

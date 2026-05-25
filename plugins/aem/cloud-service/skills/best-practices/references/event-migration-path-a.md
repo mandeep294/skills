@@ -1,8 +1,21 @@
-# Event Migration Path A: JCR EventListener → EventHandler + JobConsumer
+# Event Migration Path A: JCR `EventListener` → `JobConsumer`
 
 For classes that implement `javax.jcr.observation.EventListener` with `onEvent(EventIterator)`.
 
-This path converts the JCR observation listener to an OSGi EventHandler, then offloads business logic to a Sling JobConsumer.
+> **Stop first.** If the `onEvent` body inspects JCR paths / properties / types — i.e. it is
+> observing **repository content** — the target API on AEM as a Cloud Service is
+> **`org.apache.sling.api.resource.observation.ResourceChangeListener`**, not an OSGi
+> `EventHandler`. Follow [resource-change-listener.md](resource-change-listener.md) instead of
+> this file. The OSGi resource topics
+> (`org/apache/sling/api/resource/Resource/ADDED|CHANGED|REMOVED`) are deprecated as an
+> application API and should not be used as a migration target.
+>
+> Continue below only if the legacy `EventListener` observes something that genuinely cannot be
+> expressed as a `ResourceChangeListener` (rare — e.g. a custom JCR concern that the Sling
+> resource layer does not surface).
+
+This path converts the JCR observation listener into an OSGi `EventHandler` for a non-resource
+topic, then offloads business logic to a Sling `JobConsumer`.
 
 ---
 
@@ -183,7 +196,10 @@ public class ACLModificationJobConsumer implements JobConsumer {
 
 Read [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md) before the steps below.
 
-## A1: Convert JCR EventListener to OSGi EventHandler
+## A1: Convert JCR EventListener to OSGi EventHandler (non-resource topic)
+
+> Only apply A1 when the source cannot migrate to `ResourceChangeListener`. See the warning at
+> the top of this file.
 
 Replace JCR observation API with OSGi event API:
 
@@ -228,15 +244,28 @@ public class ACLModificationEventHandler implements EventHandler {
 }
 ```
 
-**JCR event type to OSGi resource topic mapping:**
+**JCR event type → `ChangeType` on `ResourceChangeListener`** (preferred):
 
-| JCR Event Type | OSGi Resource Event Topic |
-|---------------|---------------------------|
+| JCR Event Type | `ResourceChange.ChangeType` |
+|----------------|-----------------------------|
+| `Event.NODE_ADDED` | `ADDED` |
+| `Event.NODE_REMOVED` | `REMOVED` |
+| `Event.PROPERTY_ADDED` | `CHANGED` |
+| `Event.PROPERTY_CHANGED` | `CHANGED` |
+| `Event.PROPERTY_REMOVED` | `CHANGED` |
+
+If you are one of the rare cases that truly cannot use `ResourceChangeListener` and needs the
+raw OSGi resource topics, the legacy mapping is:
+
+| JCR Event Type | OSGi Resource Event Topic (deprecated as app API) |
+|----------------|----------------------------------------------------|
 | `Event.NODE_ADDED` | `org/apache/sling/api/resource/Resource/ADDED` |
 | `Event.NODE_REMOVED` | `org/apache/sling/api/resource/Resource/REMOVED` |
 | `Event.PROPERTY_CHANGED` | `org/apache/sling/api/resource/Resource/CHANGED` |
 | `Event.PROPERTY_ADDED` | `org/apache/sling/api/resource/Resource/CHANGED` |
 | `Event.PROPERTY_REMOVED` | `org/apache/sling/api/resource/Resource/CHANGED` |
+
+Prefer the `ResourceChangeListener` route.
 
 **JCR event data to OSGi event property mapping:**
 

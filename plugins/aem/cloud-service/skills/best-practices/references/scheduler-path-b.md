@@ -389,7 +389,6 @@ import org.apache.sling.api.resource.ResourceResolverFactory;
 import org.apache.sling.event.jobs.Job;
 import org.apache.sling.event.jobs.consumer.JobConsumer;
 import org.apache.sling.event.jobs.consumer.JobResult;
-import org.apache.sling.event.jobs.consumer.JobUtil;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
@@ -441,7 +440,7 @@ public class AssetPurgeJobConsumer implements JobConsumer {
 - Job topic MUST match the topic used in the Scheduler class
 - Move ALL business logic from `run()` or `execute(JobContext)` into `process(Job)`
 - Move business-logic `@Reference` fields here (e.g., `ExampleService`, `ResourceResolverFactory`)
-- Extract job properties via `job.getProperty("key", Type.class)` or `JobUtil.getProperty(job, "key", Type.class)` (both valid)
+- Extract job properties via `job.getProperty("key", Type.class)`. Do **not** use `org.apache.sling.event.jobs.consumer.JobUtil.getProperty(...)` — it is deprecated.
 - Map `jobContext.getConfiguration().get("key")` (old) to `job.getProperty("key", Type.class)` (new)
 - Return `JobResult.OK` on success, `JobResult.FAILED` on failure
 - Resolver + logging per [aem-cloud-service-pattern-prerequisites.md](aem-cloud-service-pattern-prerequisites.md)
@@ -516,7 +515,6 @@ import org.apache.sling.api.resource.ResourceResolverFactory;
 import org.apache.sling.event.jobs.Job;
 import org.apache.sling.event.jobs.consumer.JobConsumer;
 import org.apache.sling.event.jobs.consumer.JobResult;
-import org.apache.sling.event.jobs.consumer.JobUtil;  // optional, for JobUtil.getProperty()
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
 import org.slf4j.Logger;
@@ -525,6 +523,11 @@ import java.util.Collections;
 ```
 
 ## B5: Verify @Activate, @Modified, @Deactivate lifecycle
+
+OSGi Declarative Services allows `@Activate` and `@Modified` on the **same** method; the method
+is called both at component start and whenever bound configuration changes. This is the
+simplest pattern when activation and reconfiguration need the exact same logic (unschedule then
+reschedule):
 
 ```java
 @Activate
@@ -541,6 +544,33 @@ protected void deactivate() {
     unscheduleExistingJobs();
 }
 ```
+
+**Alternative — separate `modified` method.** If you prefer the classic OSGi DS style (two
+distinct methods), annotate each independently and let `modified` delegate to `activate`. No
+extra `@Component(modified = ...)` attribute is needed on modern bnd / Felix SCR generators —
+the annotations alone are sufficient:
+
+```java
+@Activate
+protected void activate(SchedulerConfig config) {
+    unscheduleExistingJobs();
+    if (config.enabled()) {
+        scheduleJob(config);
+    }
+}
+
+@Modified
+protected void modified(SchedulerConfig config) {
+    activate(config);
+}
+
+@Deactivate
+protected void deactivate() {
+    unscheduleExistingJobs();
+}
+```
+
+Pick whichever style the surrounding bundle already uses. Do **not** mix both in the same class.
 
 ---
 

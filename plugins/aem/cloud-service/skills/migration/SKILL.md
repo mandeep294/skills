@@ -86,16 +86,43 @@ Sleek user prompts are enough (see Quick start). **Agent:** **Branch A** → rea
 
 Scripts run via **`getBpaFindings`** (see **Calling the helper**); do not reimplement collection logic by hand unless the helper is unavailable.
 
-1. **Collection exists** → reuse; tell the user counts/age when useful.
-2. **User gave BPA CSV path** → parse, build collection, then use targets.
-3. **No CSV; MCP available** → follow [references/cam-mcp.md](references/cam-mcp.md): `list-projects`, user confirms project, then `fetch-cam-bpa-findings`.
-4. **Nothing works** → ask for CSV path or explicit Java files (manual flow).
+The helper has **two independent paths**, chosen by what the caller configures:
+
+1. **MCP configured** (`mcpFetcher` + `projectId` passed) → first call fetches all findings
+   from MCP and caches them to `<collectionsDir>/mcp/<projectId>/<pattern>.json`.
+   Every call (first and subsequent) reads from the MCP cache and returns one batch.
+2. **MCP not configured, BPA CSV provided** → first call parses the CSV and writes the
+   unified-collection JSON to `<collectionsDir>/unified-collection.json`.
+   Every call reads from the CSV cache and returns one batch.
+
+The two caches are disjoint — MCP sessions and CSV sessions never shadow each other. If
+neither is configured, the helper reports `no-source` and the agent asks for one.
+
+**Batching is mandatory on every path.** `getBpaFindings` returns findings **in batches of 5
+by default** with a `paging` envelope:
+
+```ts
+result.targets   // this batch (length <= limit)
+result.paging    // { total, returned, offset, limit, nextOffset, hasMore }
+```
+
+Process one batch at a time; stop after each batch and report progress to the user; resume on
+the user's go-ahead by re-calling the helper with `offset: paging.nextOffset`. See
+**Batched processing (batch size 5)** below.
 
 **Note:** `htlLint` does **not** appear in BPA CSV — it uses proactive `rg` discovery instead. See **htlLint flow** below.
 
 ### CAM via MCP (summary)
 
-Use **`fetch-cam-bpa-findings`** only after **`list-projects`** and **explicit user confirmation** of which project row to use (prefer **`projectId`** from that list). Do not pass an unconfirmed project name string. **Full tool schemas, REST notes, retries, and error handling:** [references/cam-mcp.md](references/cam-mcp.md).
+Use **`fetch-cam-bpa-findings-by-pattern`** for code-transformer pattern flows (scheduler,
+assetApi, eventListener, resourceChangeListener, eventHandler) and
+**`fetch-cam-bpa-findings-by-importance`** when the user instead asks "what are the
+critical/major/advisory/info findings?" (returns the latest BPA report's authoritative
+`_COUNT_<code>` rows at one importance level, sorted by descending count). Either tool
+requires **explicit user confirmation** of the project before being called — ask the user
+for their CAM project name or ID; the tools resolve it internally (prefer **`projectId`**
+when known). Do not pass an unconfirmed project name string. **Full tool schemas, REST notes, retries, and error handling:**
+[references/cam-mcp.md](references/cam-mcp.md).
 
 ### What the user might say
 
@@ -111,15 +138,37 @@ Scripts live under **`./scripts/`** (next to this `SKILL.md`).
 ```javascript
 const { getBpaFindings } = require('./scripts/bpa-findings-helper.js');
 
+// First batch (defaults: limit=5, offset=0)
 const result = await getBpaFindings(pattern, {
   bpaFilePath: './cleaned_file6.csv',
   collectionsDir: './unified-collections',
   projectId: '...',
   mcpFetcher: mcpFunction
+  // limit: 5,   // implicit default
+  // offset: 0,  // implicit default
 });
+
+// Next batch — only after the user says to continue
+if (result.paging?.hasMore) {
+  const next = await getBpaFindings(pattern, {
+    bpaFilePath: './cleaned_file6.csv',
+    collectionsDir: './unified-collections',
+    projectId: '...',
+    mcpFetcher: mcpFunction,
+    offset: result.paging.nextOffset
+  });
+}
 ```
 
-**`result`:** `success`, `source` (`'unified-collection' | 'bpa-file' | 'mcp-server' | …`), `message`, `targets` (when successful).
+**`result`:**
+- `success`, `source` (`'unified-collection' | 'bpa-file' | 'mcp-server' | …`)
+- `message` (includes a human-readable batch status)
+- `targets` — the **current batch** (length `<= limit`)
+- `paging: { total, returned, offset, limit, nextOffset, hasMore }` — always present on
+  successful calls
+
+To disable batching for a one-off programmatic caller, pass `limit: null`. The
+skill workflow itself **never** does this.
 
 ### Collection caching
 
@@ -165,19 +214,39 @@ If the id is missing from the best-practices table, say the pattern is not suppo
 
 **For BPA patterns** (`scheduler`, `resourceChangeListener`, `replication`, `eventListener`, `eventHandler`, `assetApi`): Run **`getBpaFindings`** (with `bpaFilePath` when provided). Internally: cache → CSV → MCP → manual **only when each step is applicable and succeeds**; if MCP fails, obey **MCP errors and fallback** (stop; no silent chain). For MCP details, [references/cam-mcp.md](references/cam-mcp.md).
 
+`getBpaFindings` returns **a batch of 5 findings** (default `limit=5`) along with a `paging`
+envelope. The agent processes that batch only; it does **not** request the next batch until
+the user says to continue. See **Batched processing (batch size 5)** below.
+
 **For `htlLint`**: Skip BPA/CSV/MCP — targets come from proactive `rg` discovery. See **htlLint flow** below.
 
 ### Step 4: Read before edits
 
 **STOP.** Read **`{best-practices}/SKILL.md`** and **`{best-practices}/references/<module>.md`** for the active pattern.
 
-### Step 5: Process each file
+### Step 5: Process the batch
 
-Resolve each target **only inside the IDE workspace** (see **Workspace scope (IDE)**). Read source → classify with the module → apply steps **in order** → check lints → next file.
+For **each finding in the returned batch only** (up to 5):
 
-### Step 6: Report
+1. Resolve the target **inside the IDE workspace** (see **Workspace scope (IDE)**).
+2. Read source → classify with the module → apply steps **in order** → check lints → next file.
 
-Summarize files touched, sub-paths, failures.
+Do **not** request the next batch mid-processing. Never hold more than one batch of findings in working memory at a time.
+
+### Step 6: Report batch and wait
+
+After finishing the batch, summarise **for this batch only**:
+
+- `paging.returned` findings processed (of `paging.total`), with class names.
+- Any files touched, plus any skips / failures.
+- If `paging.hasMore === true`, tell the user:
+  *"Processed batch of N (offset {offset}–{offset + returned − 1} of {total}). Reply
+  `continue` to process the next batch, or name specific classes to focus on."*
+- If `paging.hasMore === false`, say the pattern is done and move to the overall session report.
+
+**Stop and wait for the user.** Do not automatically start the next batch. Only call
+`getBpaFindings` (or `fetch-cam-bpa-findings-by-pattern`) again when the user explicitly
+requests it, and pass `offset: paging.nextOffset` unchanged.
 
 ### Manual flow (no BPA)
 
@@ -197,9 +266,80 @@ Does **not** use BPA CSV, CAM/MCP, or best-practices pattern modules for collect
 4. **Fix** each hit per the matching pattern section in the module.
 5. **Report** and recommend the user run `mvn clean install` or HTL validate to confirm no warnings remain.
 
+## Batched processing (batch size 5)
+
+Findings are served to the agent in batches of **5** by default, regardless of source (MCP
+or CSV). Batching happens **client-side** — the heavy fetch (MCP call or CSV parse) happens
+once and is materialized to a local JSON cache; every subsequent batch is a cheap slice of
+that cache.
+
+### Rules
+
+1. **Default `limit` is 5.** Pass `limit: 5` (or accept the helper default). The skill never
+   requests a larger batch unless the user has explicitly asked for one.
+2. **Offset starts at 0** and advances by `result.paging.nextOffset` from the previous call.
+   Do not compute offsets from `offset + limit` — read `nextOffset` from the previous
+   response; it is authoritative.
+3. **Stable ordering.** Each cache file is written once with a deterministic order; every
+   slice from it is therefore stable and contiguous.
+4. **One batch per call. One batch in memory at a time.** Process, report, stop. No
+   pre-fetching, no merging across batches.
+5. **Resume is stateless.** The skill does not maintain its own progress file. Resuming means
+   "call the helper again with `offset: previous.paging.nextOffset`". If the session ends, a
+   later session calls with the same `pattern` and `offset` and gets the same batch.
+6. **Done when `paging.hasMore === false`** (or `paging.nextOffset === null`).
+7. **To refresh source data**, delete the relevant cache file:
+   - CSV: `<collectionsDir>/unified-collection.json`
+   - MCP: `<collectionsDir>/mcp/<projectId>/<pattern>.json`
+
+### Agent-visible flow (CSV path)
+
+```
+[User] "Fix scheduler findings using ./reports/bpa.csv"
+[Agent] getBpaFindings('scheduler', { bpaFilePath, limit: 5, offset: 0 })
+        // first call parses CSV → writes <dir>/unified-collection.json → slices
+        → paging: { total: 137, returned: 5, offset: 0, nextOffset: 5, hasMore: true }
+        Processes 5 findings.
+        Reports: "Processed 5 of 137 (offset 0–4). Reply `continue` for the next batch."
+[User] "continue"
+[Agent] getBpaFindings('scheduler', { bpaFilePath, limit: 5, offset: 5 })
+        // reads cached JSON — no CSV re-parse
+        → paging: { ..., offset: 5, nextOffset: 10, hasMore: true }
+        Processes next 5.
+...
+```
+
+### Agent-visible flow (MCP path)
+
+```
+[User] "Fix scheduler findings from CAM project <id>"
+[Agent] getBpaFindings('scheduler', { mcpFetcher, projectId, limit: 5, offset: 0 })
+        // first call: one MCP fetch → writes <dir>/mcp/<projectId>/scheduler.json → slices
+        → paging: { total: 137, returned: 5, offset: 0, nextOffset: 5, hasMore: true }
+        Processes 5 findings.
+        Reports and stops.
+[User] "continue"
+[Agent] getBpaFindings('scheduler', { mcpFetcher, projectId, limit: 5, offset: 5 })
+        // reads cached MCP JSON — NO additional MCP call
+        → paging: { ..., offset: 5, nextOffset: 10, hasMore: true }
+...
+```
+
+### Do not
+
+- Do not call `getBpaFindings` with `limit: null` inside the skill flow. That option exists
+  only for programmatic callers that deliberately want the full list.
+- Do not invent a next batch offset. Always read `paging.nextOffset` from the previous
+  response.
+- Do not accumulate `targets` across batches in memory.
+- Do not call the MCP tool for every batch; the first call caches, subsequent batches read
+  the cache.
+
 ## Quick reference
 
 **Source priority (when choosing how to obtain targets):** unified collection → BPA CSV → MCP → manual paths. **Not** an automatic cascade after MCP errors — if MCP fails, stop and wait for user direction (see **MCP errors and fallback**). For `htlLint`, use proactive `rg` discovery (no BPA/MCP). For **OSGi → Cloud Manager**, use [references/osgi-cfg-json-cloud-manager.md](references/osgi-cfg-json-cloud-manager.md) only (no BPA/MCP).
+
+**Batch size:** 5 (default) on every BPA source. See **Batched processing** above.
 
 **User-facing snippets:** *"Using existing BPA collection (N findings)…"* / *"Processing your BPA report…"* / *"Fetched findings from CAM."* / *"Scanning HTL templates for data-sly-test lint issues…"* / optional prompt after MCP stop above.
 
@@ -208,7 +348,16 @@ Does **not** use BPA CSV, CAM/MCP, or best-practices pattern modules for collect
 From this skill's directory:
 
 ```bash
+# First batch (default offset=0, limit=5)
 node scripts/bpa-findings-helper.js scheduler ./unified-collections
 node scripts/bpa-findings-helper.js scheduler ./unified-collections ./cleaned_file6.csv
-node scripts/unified-collection-reader.js all ./unified-collections
+
+# Next batch: offset=5, limit=5
+node scripts/bpa-findings-helper.js scheduler ./unified-collections ./cleaned_file6.csv 5 5
+
+# Full unbounded listing (development / debugging only — skill never does this)
+node scripts/bpa-findings-helper.js scheduler ./unified-collections ./cleaned_file6.csv 0 all
+
+# Same batching on the low-level reader
+node scripts/unified-collection-reader.js all ./unified-collections 0 5
 ```
