@@ -27,18 +27,11 @@ design while still making content editable in DA. Typical phrasing:
 
 ## What this skill does NOT do
 
-- Does **not** rewrite the page into EDS-shape markup (`div`-with-class
-  blocks). That's `page-import`. The overlay pattern keeps the
-  original generator's DOM intact.
-- Does **not** modify the EDS substrate code in the target repo
-  unless the conversion surfaces a substrate gap. Substrate evolution
-  is a separate change with its own PR review.
-
-The skill **does** support three asset strategies (see
-[knowledge/methodology.md](./knowledge/methodology.md) §3): `absolute`
-(rewrite to source-host URLs), `vendor` (copy into `./assets/`), and
-`da-media` (upload to `/media/<scope>/` via the bundled
-`da-media-upload.mjs` script).
+**Not for canonical EDS block-rewrite migrations** — that's
+`page-import`. Snowflake preserves the source DOM; it does not
+rewrite to `div`-with-class blocks. Three asset strategies are
+supported (see [knowledge/methodology.md](./knowledge/methodology.md)
+§3): `absolute`, `vendor`, `da-media`.
 
 ## Skill dependencies
 
@@ -61,28 +54,60 @@ Confirm with the user before invoking:
    or `~/.aem/da-token.json` (the cache **da-auth** writes). If neither
    is set, invoke the **da-auth** skill first.
 
-## Quick start
+## Quick start — end-to-end example
 
-From the target EDS repository root, kick off Phase 0 (substrate
-install / verify) and then proceed phase-by-phase:
+From the target EDS repository root, here's the full seven-phase
+conversion in compressed form. Each phase file under
+[phases/](./phases/) holds the complete prompt; this is the
+shape of the actual commands the agent emits.
 
 ```bash
-# 1. Install (or verify) the overlay substrate — runs once per repo.
-#    --dry-run previews the change; drop it to apply.
-node "<SKILL_DIR>/scripts/install-substrate.mjs" --dry-run
+# Inputs (gathered from the user during Prerequisites)
+SOURCE_URL="https://example.com/promo"
+PAGE_SLUG="promo"
+DA_ROOT="/marketing"
+NNN=001                           # next run number
+PROJECT=".snowflake/projects/${NNN}-${PAGE_SLUG}"
+TEMPLATE_NAME="promo"
+
+# Phase 0 — install (or verify) the overlay substrate (once per repo)
 node "<SKILL_DIR>/scripts/install-substrate.mjs"
 
-# 2. Load the canonical phase rules, then walk the seven phases in
-#    order. Each phase file is self-contained executable bash + Node.
-cat "<SKILL_DIR>/knowledge/methodology.md"     # canonical rules
-cat "<SKILL_DIR>/phases/1-capture.md"          # then phase 1
-# ... through phases/6-reflect.md
+# Phase 1 — capture: fetch source + assets into the project folder
+mkdir -p "$PROJECT/input"
+playwright-cli tab-new "$SOURCE_URL"
+playwright-cli html > "$PROJECT/input/${PAGE_SLUG}.html"
+
+# Phase 2 — analyze: produce decisions.json (sections, slots, asset
+# strategy, head-links). Driven by phases/2-analyze.md.
+
+# Phase 3 — generate: produce 5 artifacts + DA-source body
+# (templates/<tpl>.html, fragments/<tpl>/{header,footer}.html,
+# styles/<tpl>.css, scripts/<tpl>-animations.js, da/<slug>.html).
+# Driven by phases/3-generate.md.
+
+# Phase 4 — wire: copy artifacts to EDS-served paths and build the
+# drafts file. Driven by phases/4-wire.md.
+
+# Phase 5 — round-trip: local dev server + production preview
+npx -y @adobe/aem-cli up --html-folder drafts &
+TOKEN="${DA_TOKEN:-$(jq -r .access_token ~/.aem/da-token.json)}"
+git checkout -b "snowflake-${NNN}" && git add . && git commit -m "snowflake #${NNN}"
+git push -u origin "snowflake-${NNN}"
+curl -X PUT -H "Authorization: Bearer $TOKEN" \
+  -F "data=@${PROJECT}/output/da/${PAGE_SLUG}.html;type=text/html" \
+  "https://admin.da.live/source/${OWNER}/${REPO}${DA_ROOT}/${PAGE_SLUG}.html"
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  "https://admin.hlx.page/preview/${OWNER}/${REPO}/snowflake-${NNN}${DA_ROOT}/${PAGE_SLUG}"
+# Verify at https://snowflake-${NNN}--${REPO}--${OWNER}.aem.page/${DA_ROOT}/${PAGE_SLUG}
+
+# Phase 6 — reflect: append findings to $PROJECT/learnings.md;
+# promote cross-project rules to knowledge/learnings.md.
 ```
 
 `<SKILL_DIR>` is the absolute path to the directory containing this
-`SKILL.md`. The agent computes it from the file location and substitutes
-it into each invocation — see [HOST-NOTES.md](./HOST-NOTES.md)
-for per-host resolution rules.
+`SKILL.md`. The agent substitutes it before invoking — see
+[HOST-NOTES.md](./HOST-NOTES.md) for per-host resolution rules.
 
 ## The seven phases (sequential)
 
