@@ -1,9 +1,10 @@
 # Phase 2 — Analyze
 
-Goal: produce a structural map and a list of decisions that Generate
-needs. Decisions are written as both human prose (in `notes.md`) and
-a machine-readable artifact (`decisions.json`) — Generate reads the
-latter so it doesn't have to re-parse the prose.
+Goal: produce a structural map, a conversion-level recommendation,
+and a list of decisions that Generate needs. Decisions are written as
+both human prose (in `notes.md`) and a machine-readable artifact
+(`decisions.json`) — Generate reads the latter so it doesn't have to
+re-parse the prose.
 
 ## Knowledge to load
 
@@ -12,6 +13,9 @@ resolution from `SKILL.md`):
 - `methodology.md` §2 (Analyze) — the canonical rules
 - `learnings.md` — at minimum skim for entries about structural
   patterns, generator-specific quirks, and known disambiguator rules
+- `block-level-feasibility.md` — the five checks for block-level
+  conversion (structure, CSS scope, content model, JS independence,
+  visual independence)
 
 Resolution: check `.snowflake/knowledge/<file>.md` first (project
 override), then `<SKILL_DIR>/knowledge/<file>.md` (bundled).
@@ -119,6 +123,39 @@ Line   Element
 1. (numbered decisions for Generate to act on)
 ```
 
+## Block-level feasibility assessment
+
+After completing the structural inspection above, run the five checks
+from `block-level-feasibility.md` on each content section (excluding
+header/footer). This assessment always runs regardless of the `level`
+parameter — the results are recorded in `decisions.json` and
+`notes.md` for every run.
+
+For each content section, evaluate:
+
+1. **Structure** — clear boundary with unique class?
+2. **CSS scope** — rules scoped to this section's class?
+3. **Content model** — maps to DA block table rows (text, images, links)?
+4. **JS independence** — no cross-section JavaScript coupling?
+5. **Visual independence** — own background, no overlapping positioned elements?
+
+Record the per-section results and derive a recommendation:
+
+| Result | Recommendation |
+|--------|---------------|
+| All sections pass all 5 | `block-level` |
+| Most pass, 1–2 fail | `hybrid` |
+| Most fail | `page-level` |
+
+### How `level` controls what happens next
+
+| `level` param | Analysis runs? | Transition to Phase 3 |
+|---------------|----------------|----------------------|
+| `auto` | Yes | Present recommendation + per-section table to user. Ask to confirm or override. Proceed with confirmed level. |
+| `check` | Yes | **Stop here.** Write results to `decisions.json` and `notes.md`. Do not proceed to Phase 3. |
+| `block` | Yes (validation) | Proceed to Phase 3 with block-level. Log a warning in `notes.md` if analysis recommends otherwise. |
+| `page` | Yes (validation) | Proceed to Phase 3 with page-level. Log a note if analysis shows block-level was feasible. |
+
 ## Produce `decisions.json`
 
 Write a structured artifact in the project folder. Generate reads
@@ -126,6 +163,36 @@ this directly. Suggested shape:
 
 ```json
 {
+  "levelParam": "auto",
+  "conversionLevel": "block-level",
+  "feasibility": {
+    "recommendation": "block-level",
+    "sections": [
+      {
+        "name": "hero",
+        "level": "block",
+        "checks": {
+          "structure": "pass",
+          "cssScope": "pass",
+          "contentModel": "pass",
+          "jsIndependence": "pass",
+          "visualIndependence": "pass"
+        }
+      },
+      {
+        "name": "booking",
+        "level": "fragment",
+        "checks": {
+          "structure": "pass",
+          "cssScope": "pass",
+          "contentModel": "fail — 6-field interactive form",
+          "jsIndependence": "pass",
+          "visualIndependence": "fail — -72px overlap with hero"
+        },
+        "failReason": "Complex interactive widget with visual coupling"
+      }
+    ]
+  },
   "templateName": "<name>",
   "synthesizeMain": true,
   "sections": [
@@ -171,6 +238,10 @@ this directly. Suggested shape:
 }
 ```
 
+The `feasibility` object is always present. The `slots` arrays are
+only populated for page-level sections. Block-level sections get
+their content model defined during Phase 3 (Generate) instead.
+
 This is a sketch — actual fields evolve per run. Generate phase
 reads `decisions.json`, falls back to re-reading `notes.md` if a
 field is missing.
@@ -189,6 +260,15 @@ a `strip` array so Generate doesn't accidentally include them.
 ## Update state and finish
 
 Set `state.phase = "analyze"`, `state.phaseStatus = "complete"`,
-`state.analyzeCompletedAt = "<timestamp>"`. Save state.json.
+`state.analyzeCompletedAt = "<timestamp>"`,
+`state.conversionLevel = "<chosen level>"`. Save state.json.
 
-Continue to Phase 3 (Generate).
+### Transition
+
+- **`level=check`**: stop here. Report the feasibility results to
+  the user. Do NOT proceed to Phase 3.
+- **`level=auto`**: present the recommendation and per-section table.
+  Ask the user to confirm or override. Record the confirmed level in
+  `state.conversionLevel`. Then proceed to Phase 3.
+- **`level=block`** or **`level=page`**: proceed to Phase 3
+  immediately with the specified level.

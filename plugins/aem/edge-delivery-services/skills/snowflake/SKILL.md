@@ -1,18 +1,28 @@
 ---
 name: snowflake
-description: Static-to-EDS overlay conversion that preserves the original DOM byte-for-byte while making text and image content authorable in Document Authoring. Use when converting an AI-generated static HTML page (Stardust, Mobirise, Relume, Lovable, v0, Figma-derived hand-coded, etc.) into an Edge Delivery Services page WITHOUT rewriting it into canonical block markup. Triggers on "convert this page to EDS overlay", "static-to-EDS overlay", "next experimentation", "next run", "start run #N", or when a user provides a source URL and asks to make it editable in DA while keeping the original design intact. Do NOT use for canonical EDS block-rewrite migrations — that's the page-import skill.
+description: Static-to-EDS conversion that preserves the original design while making content authorable in Document Authoring. Two modes — page-level (overlay template with slot markers) and block-level (each section becomes an independent EDS block). Use when converting an AI-generated static HTML page (Stardust, Mobirise, Relume, Lovable, v0, Figma-derived hand-coded, etc.) into an Edge Delivery Services page. Triggers on "convert this page to EDS", "static-to-EDS overlay", "convert to EDS blocks", "next experimentation", "next run", "start run", or when a user provides a source URL and asks to make it editable in DA while keeping the original design intact. Do NOT use for canonical EDS block-rewrite migrations — that's the page-import skill.
 license: Apache-2.0
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
-# Snowflake — Static-to-EDS Overlay Conversion
+# Snowflake — Static-to-EDS Conversion
 
-Convert a static HTML page into an EDS page using the **overlay
-pattern**: the original DOM is preserved exactly, and only the text
-and image content becomes authorable in Document Authoring. Header
-and footer remain static repository fragments. The page CSS and any
-animation JavaScript ship per-template under the EDS code bus.
+Convert a static HTML page into an EDS page while preserving the
+original design and making content authorable in Document Authoring.
+Two conversion levels are supported:
+
+- **Page-level** (overlay) — the original DOM is preserved
+  byte-for-byte via a template with `[data-slot]` markers. One
+  template, one CSS file, one DA doc with slot-keyed rows.
+- **Block-level** — each content section becomes an independent EDS
+  block with its own `decorate()` function and CSS. Content is
+  authored in DA block tables. Header and footer stay as static
+  fragments.
+
+Both levels keep the original visual design intact. Page-level is
+the safer default; block-level produces more standard EDS output
+but requires section independence in the source page.
 
 ## When to use
 
@@ -22,16 +32,48 @@ design while still making content editable in DA. Typical phrasing:
 
 - "Convert https://example.com/static-page to EDS"
 - "Make this page editable in DA but keep the original markup"
+- "Convert this page to EDS blocks" (signals `level=block`)
 - "Start the next experimentation for URL …"
-- "Static-to-EDS overlay for …"
+- "Static-to-EDS overlay for …" (signals `level=page`)
 
 ## What this skill does NOT do
 
 **Not for canonical EDS block-rewrite migrations** — that's
-`page-import`. Snowflake preserves the source DOM; it does not
-rewrite to `div`-with-class blocks. Three asset strategies are
-supported (see [knowledge/methodology.md](./knowledge/methodology.md)
-§3): `absolute`, `vendor`, `da-media`.
+`page-import`. Snowflake preserves the source design; `page-import`
+rewrites to standard EDS block patterns with no visual fidelity
+target. Three asset strategies are supported (see
+[knowledge/methodology.md](./knowledge/methodology.md) §3):
+`absolute`, `vendor`, `da-media`.
+
+## Parameters
+
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `level` | `auto`, `check`, `block`, `page` | `auto` | Conversion level — see below |
+
+### `level` values
+
+| Value | Behavior |
+|-------|----------|
+| `auto` | Run the feasibility analysis in Phase 2, present the recommendation, ask the user to confirm before Phase 3 |
+| `check` | Run the feasibility analysis only — produce the report in `decisions.json`, stop before Phase 3. Useful for batch scanning |
+| `block` | Block-level conversion. Analysis still runs as validation (written to `decisions.json`) but does not gate the conversion |
+| `page` | Page-level conversion (standard overlay). Analysis still runs as validation but does not gate the conversion |
+
+When `level` is not provided and the user's phrasing signals intent,
+infer it:
+- "convert to EDS blocks", "block-level" → `level=block`
+- "overlay", "preserve the DOM", "snowflake overlay" → `level=page`
+- Neutral phrasing → `level=auto`
+
+### Usage examples
+
+```
+/snowflake                          → auto (interactive)
+/snowflake level=check              → feasibility scan only
+/snowflake level=block              → block-level, no confirmation
+/snowflake level=page               → page-level overlay
+```
 
 ## Skill dependencies
 
@@ -53,6 +95,8 @@ Confirm with the user before invoking:
 4. **DA admin token** — Snowflake reads `$DA_TOKEN` from the environment,
    or `~/.aem/da-token.json` (the cache **da-auth** writes). If neither
    is set, invoke the **da-auth** skill first.
+5. **Conversion level** (optional) — if the user hasn't specified,
+   defaults to `auto`. See the Parameters section above.
 
 ## Quick start — end-to-end example
 
@@ -69,6 +113,7 @@ DA_ROOT="/marketing"
 NNN=001                           # next run number
 PROJECT=".snowflake/projects/${NNN}-${PAGE_SLUG}"
 TEMPLATE_NAME="promo"
+LEVEL="auto"                      # auto | check | block | page
 
 # Phase 0 — install (or verify) the overlay substrate (once per repo)
 node "<SKILL_DIR>/scripts/install-substrate.mjs"
@@ -79,7 +124,9 @@ playwright-cli tab-new "$SOURCE_URL"
 playwright-cli html > "$PROJECT/input/${PAGE_SLUG}.html"
 
 # Phase 2 — analyze: produce decisions.json (sections, slots, asset
-# strategy, head-links). Driven by phases/2-analyze.md.
+# strategy, head-links, conversionLevel). Includes block-level
+# feasibility assessment. If LEVEL=check, stop here.
+# Driven by phases/2-analyze.md.
 
 # Phase 3 — generate: produce 5 artifacts + DA-source body
 # (templates/<tpl>.html, fragments/<tpl>/{header,footer}.html,
@@ -126,12 +173,20 @@ proceeds. Reruns are safe — phases skip work already done.
 
 2. **Analyze** — structural map: header/footer boundaries, section
    list, slot opportunities, head-level links to lift, asset strategy.
-   Produces `notes.md` + `decisions.json`.
+   **Also runs the block-level feasibility assessment** — see
+   [knowledge/block-level-feasibility.md](./knowledge/block-level-feasibility.md).
+   Produces `notes.md` + `decisions.json` (including `conversionLevel`).
    See [phases/2-analyze.md](./phases/2-analyze.md).
 
-3. **Generate** — produce the 5 deployable artifacts (template HTML,
-   header fragment, footer fragment, page CSS, page animations JS)
-   plus the DA-source body fragment.
+3. **Generate** — branches by `conversionLevel` from Phase 2:
+   - **`page`**: produce the 5 overlay artifacts (template HTML,
+     header fragment, footer fragment, page CSS, animations JS)
+     plus the DA-source body with slot-keyed rows.
+   - **`block`**: produce per-section block JS/CSS, header/footer
+     fragments, global styles/tokens, and the DA-source body with
+     standard block tables.
+   - **`hybrid`**: block-level for passing sections, page-level
+     fragments for failing sections.
    See [phases/3-generate.md](./phases/3-generate.md).
 
 4. **Wire** — copy artifacts to EDS-served paths, build the local-test
@@ -165,7 +220,9 @@ overrides win on conflict.
    findings (Generate and Round-trip should at least skim it).
 6. [knowledge/eds-da-mechanics.md](./knowledge/eds-da-mechanics.md) —
    EDS pipeline overlay-runtime lore.
-7. The phase prompt for the current phase.
+7. [knowledge/block-level-feasibility.md](./knowledge/block-level-feasibility.md) —
+   criteria for block-level vs page-level conversion (Analyze phase).
+8. The phase prompt for the current phase.
 
 Then start at Phase 0.
 

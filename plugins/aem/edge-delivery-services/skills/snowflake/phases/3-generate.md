@@ -3,6 +3,18 @@
 Goal: produce the 5 deployable artifacts and the DA-source body
 fragment, written to the project's `output/` folder.
 
+> **Note on `conversionLevel`.** As of skill version 1.1.0, Phase 2
+> writes `decisions.json.conversionLevel` (`page-level` |
+> `block-level` | `hybrid`) based on the feasibility assessment in
+> [../knowledge/block-level-feasibility.md](../knowledge/block-level-feasibility.md).
+> **This phase currently implements only the `page-level` path**
+> (overlay template with `[data-slot]` markers). The `block-level`
+> and `hybrid` paths described in `SKILL.md` are documented but not
+> yet implemented here. If `decisions.json.conversionLevel` is
+> `block-level` or `hybrid`, fall back to the page-level path and
+> surface a note to the user that block-level generation is a
+> future enhancement. Do not silently produce wrong output.
+
 ## Knowledge to load
 
 Before writing anything, load (using the override-then-bundled
