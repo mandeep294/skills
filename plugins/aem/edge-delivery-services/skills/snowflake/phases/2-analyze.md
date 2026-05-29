@@ -58,6 +58,13 @@ For the HTML at `<projectsDir>/<NNN>-<slug>/input/index.html`:
    - `<a>` with text and href → link slot (NOT if the link wraps
      other to-be-slotted children — see learnings: "container vs.
      children" rule)
+   - **Mixed-content links**: for each `<a>` identified as a slot
+     candidate, inspect children. If the `<a>` contains `<svg>`,
+     decorative `<img>`, icon-font `<span>`, or other non-text
+     children alongside the authorable text, mark the slot as
+     `"mixedContent": true` in `decisions.json`. Generate (Phase 3)
+     will use the span-wrapper pattern instead of a direct link slot.
+     See learnings entry "link slots with inline decorative elements".
    - Decorative SVGs, icons, hardcoded glyphs → static (not slots)
    - Generator-emitted placeholders (e.g. `data-placeholder="true"`)
      → mark with `data-slot-skip="placeholder"`, never authorable
