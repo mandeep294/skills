@@ -175,7 +175,7 @@ Defaults live in the `defaults` block of
 ```json
 "defaults": {
   "projectsDir": ".snowflake/projects",
-  "daRoot": "/marketing",
+  "daRoot": "",
   "branchPrefix": "snowflake-",
   "trunkBranch": "main",
   "tagPrefix": "snowflake-"

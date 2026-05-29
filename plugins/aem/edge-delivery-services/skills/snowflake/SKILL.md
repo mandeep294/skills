@@ -101,8 +101,8 @@ confirmation before any work begins:
    the overlay engine wired (see [knowledge/architecture.md](./knowledge/architecture.md)
    §"Solution shape"). Phase 0 installs it if absent.
 3. **DA root path** — read from `.snowflake/config.json` `daRoot` key
-   (default `/marketing`, stamped on first substrate install). Change
-   in the summary if a different path is needed for this run.
+   if set, otherwise defaults to the current git branch name (the same
+   branch the skill uses for code). Shown in summary; override inline.
 4. **Conversion level** — inferred from phrasing (see Parameters), else
    `page`. Shown in summary; override inline.
 5. **Slug / template name** — derived from the source URL (kebab-case,
@@ -147,7 +147,7 @@ On every invocation the agent performs these steps **before** entering Phase 0:
    ```
    Source URL : https://example.com/promo   ← required (provided)
    Target repo: acme/my-site                ← detected from git
-   DA root    : /marketing                  ← config default
+   DA root    : /main                        ← from current branch
    Level      : page                        ← default
    Slug       : promo                       ← derived from URL
    Substrate  : clean install — 9 files     ← (or: already current ✓)
@@ -173,7 +173,7 @@ shape of the actual commands the agent emits.
 # Inputs (resolved during init, confirmed in the summary)
 SOURCE_URL="https://example.com/promo"
 PAGE_SLUG="promo"
-DA_ROOT="/marketing"
+DA_ROOT="/main"                       # defaults to current branch name
 NNN=001                           # next run number
 PROJECT=".snowflake/projects/${NNN}-${PAGE_SLUG}"
 TEMPLATE_NAME="promo"

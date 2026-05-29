@@ -16,13 +16,17 @@ otherwise resolve now and confirm with the user before fetching.
     || git remote get-url origin \
        | sed -E 's|.*github\.com[:/]||;s|\.git$||')
   ```
-- **DA root** — from state.json, or read the config default:
+- **DA root** — from state.json, or read the config, falling back to
+  the current branch name:
   ```bash
-  DA_ROOT=$(jq -r '.daRoot // "/marketing"' \
-    .snowflake/config.json 2>/dev/null || echo "/marketing")
+  BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  DA_ROOT=$(jq -r '.daRoot // ""' \
+    .snowflake/config.json 2>/dev/null)
+  DA_ROOT="${DA_ROOT:-/$BRANCH}"
   ```
-  Show this value in the init summary so the user can correct it for runs
-  that land under a different DA path.
+  Defaults to the current git branch name (the same branch the skill
+  uses for code). Show this value in the init summary so the user can
+  correct it for runs that land under a different DA path.
 - **Slug / template name** — derived (see "State file" below). Values shown
   in the init summary; user may override there, not here.
 
