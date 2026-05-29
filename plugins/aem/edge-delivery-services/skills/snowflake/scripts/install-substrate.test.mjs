@@ -105,3 +105,55 @@ test('missing loadEager anchor fails loud and does not mis-patch', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('partial hook (import present, guard missing) is completed on re-run', () => {
+  const dir = makeRepo();
+  try {
+    runInstaller(dir);                       // full install: import + guard
+    // Simulate a repo whose scripts.js has the import (marker present) and
+    // byte-matching engine files, but is missing the loadEager guard — e.g.
+    // a future substrate added an inject edit that this install predates.
+    const guard = `  if (main && await applyTemplateOverlay(main)) {
+    document.body.classList.add('appear');
+    return;
+  }
+`;
+    const scripts = read(dir, 'scripts/scripts.js');
+    assert.ok(scripts.includes(guard), 'precondition: guard was installed');
+    writeFileSync(join(dir, 'scripts/scripts.js'), scripts.replace(guard, ''));
+    assert.doesNotMatch(read(dir, 'scripts/scripts.js'), /applyTemplateOverlay\(main\)/);
+
+    const r = runInstaller(dir);             // re-run must re-add the guard
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(read(dir, 'scripts/scripts.js'), /if \(main && await applyTemplateOverlay\(main\)\)/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('already-installed second run reports no-op', () => {
+  const dir = makeRepo();
+  try {
+    runInstaller(dir);
+    const r = runInstaller(dir);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(r.stdout, /no-op|already installed/i);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a custom edit elsewhere in scripts.js survives install', () => {
+  const custom = STOCK_SCRIPTS.replace(
+    'async function loadLazy(doc) {',
+    'function myCustomBlock() { /* SURVIVE-ME */ }\n\nasync function loadLazy(doc) {',
+  );
+  const dir = makeRepo({ 'scripts/scripts.js': custom });
+  try {
+    const r = runInstaller(dir);
+    assert.equal(r.code, 0, r.stderr);
+    assert.match(read(dir, 'scripts/scripts.js'), /SURVIVE-ME/, 'custom code was clobbered');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

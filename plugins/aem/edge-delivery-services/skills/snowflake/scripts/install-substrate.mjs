@@ -89,10 +89,8 @@ log(`bundled substrate version: ${bundledVersion}`);
 // Falls back to the marker-comment check if file reads fail.
 // ---------------------------------------------------------------------------
 
-import { readFileSync as _readSync } from 'node:fs';
-
 function readMaybe(path) {
-  try { return _readSync(path, 'utf8'); } catch { return null; }
+  try { return readFileSync(path, 'utf8'); } catch { return null; }
 }
 
 const markerFilePath = join(REPO_ROOT, manifest.marker.file);
@@ -112,6 +110,11 @@ for (const entry of manifest.replace) {
   }
 }
 
+const injectComplete = markerPresent && (manifest.inject ?? []).every((target) => {
+  const content = readMaybe(join(REPO_ROOT, target.file));
+  return content !== null && target.edits.every((e) => content.includes(e.skipIf));
+});
+
 const configPath = join(REPO_ROOT, '.snowflake', 'config.json');
 let installedVersion = null;
 if (existsSync(configPath)) {
@@ -124,8 +127,8 @@ if (existsSync(configPath)) {
 }
 
 // Decision tree
-if (markerPresent && allFilesMatchBundle) {
-  log(`substrate v${bundledVersion} already installed (byte-identical) — no-op`);
+if (markerPresent && allFilesMatchBundle && injectComplete) {
+  log(`substrate v${bundledVersion} already installed — no-op`);
   process.exit(0);
 }
 
