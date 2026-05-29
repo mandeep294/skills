@@ -253,7 +253,7 @@ curl -X POST \
   "https://admin.da.live/source/<org>/<repo>/path/to/page.html"
 ```
 
-See the **da-content** skill (`references/platform.md`, §7) for the DA Source API contract and rate limits.
+See the **da-content** skill (platform reference §7) for the DA Source API contract and rate limits.
 
 ---
 
