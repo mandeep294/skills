@@ -29,6 +29,18 @@ gh extension install ai-ecoverse/gh-upskill
 gh upskill adobe/skills --all
 ```
 
+### Cursor (preview)
+
+The `app-builder` plugin includes a Cursor-native manifest at `plugins/app-builder/.cursor-plugin/plugin.json` as the pilot for Cursor distribution. Other plugins will gain Cursor support once the pattern is validated. To install locally for development:
+
+```bash
+mkdir -p ~/.cursor/plugins/local/app-builder
+cp -R plugins/app-builder/. ~/.cursor/plugins/local/app-builder/
+# Then in Cursor: Cmd+Shift+P → Developer: Reload Window
+```
+
+Verify the plugin loaded via **Cursor Settings → Plugins** (it should appear with all six App Builder skills). The skills are also visible in **Settings → Rules** under "Agent Decides".
+
 ## Available Skills
 
 ### For Business
@@ -72,13 +84,20 @@ Design-phase skills that run *before* implementation. Produces static HTML and J
 
 | Skill | Description |
 |-------|-------------|
-| `page-import` | Import webpages (orchestrator) |
+| `page-import` | Import webpages into canonical EDS block format (orchestrator) |
 | `scrape-webpage` | Scrape and analyze webpage content |
 | `identify-page-structure` | Analyze page sections |
 | `page-decomposition` | Analyze content sequences |
 | `authoring-analysis` | Determine authoring approach |
 | `generate-import-html` | Generate structured HTML |
 | `preview-import` | Preview imported content |
+| `snowflake` | Static-to-EDS overlay conversion — preserves original DOM byte-for-byte (alternative path to `page-import` for AI-generated/static pages) |
+
+##### Content & Platform Reference
+
+| Skill | Description |
+|-------|-------------|
+| `da-content` | Reference for DA + EDS content rules: block HTML format, metadata, media handling, DA Source API contract, and silent-failure rules |
 
 ##### Managing Projects
 
