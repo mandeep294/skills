@@ -339,6 +339,6 @@ IMS auth details, and rate limits.
 
 - [references/command-reference.md](./references/command-reference.md) — exhaustive flag +
   `AEM_*` env-var tables for all commands
-- Upstream README: https://github.com/adobe/helix-cli#readme — authoritative source
-  (the package is `@adobe/aem-cli` despite the `helix-cli` repo name)
+- Upstream docs: https://www.npmjs.com/package/@adobe/aem-cli — npm page for `@adobe/aem-cli`
+  (the GitHub repo is named `helix-cli` for historical reasons)
 - Importer UI: https://github.com/adobe/helix-importer-ui — the UI served by `aem import`
