@@ -20,13 +20,6 @@ Analyze one or more CJA dimensions to understand their cardinality, distribution
 anomalies, data quality issues, and forecasts. Produces an actionable report that helps
 teams understand what's inside their dimensions and where to focus attention.
 
-## Why This Matters
-
-Dimensions are the backbone of every CJA report — but most teams have never looked closely
-at what's actually inside them. High-cardinality dimensions hurt query performance. Skewed
-distributions mean a few values dominate reporting. Stale or error-laden dimensions
-silently corrupt analysis. This skill surfaces those issues before they become problems.
-
 ## Workflow
 
 Execute phases in order. Each phase is **selectable** — the user can ask for a subset
@@ -72,10 +65,7 @@ For each dimension:
 
 1. `runReport` with dimension as rows + primary metric (e.g., occurrences/visits).
    Request at least 50 rows to capture the distribution shape.
-2. Compute:
-   - **Top-N % share**: what % of total metric the top 1, 5, 10 values hold
-   - **Gini coefficient**: measure of concentration (0 = perfectly flat, 1 = one value dominates)
-   - **Cumulative distribution**: what % of metric is covered by top N values
+2. Compute top-N % share (top 1, 5, 10), Gini coefficient, and cumulative distribution.
 3. Classify skew:
    | Label | Condition |
    |-------|-----------|
@@ -107,11 +97,9 @@ Store: `{dimensionId, periodComparison: {period1, period2, changes: [{value, p1M
 
 For each dimension:
 
-1. Use the time-series data from Phase 3. For each dimension value with enough data points,
-   compute a rolling mean and standard deviation.
-2. **Z-score detection**: flag any (value, date) pair where
-   `z_score = |metric - rolling_mean| / rolling_std > threshold` (default: 2.0).
-   Configurable sensitivity: 1.5 (sensitive), 2.0 (default), 3.0 (conservative).
+1. From the Phase 3 time-series, compute rolling mean and stddev per dimension value.
+2. **Z-score detection**: flag (value, date) pairs where the z-score exceeds the threshold
+   (default: 2.0; sensitive: 1.5; conservative: 3.0).
 3. **Threshold alerts**:
    - Any single value holding > 50% of total metric on a given day
    - Value count that is > 2× the rolling average for that value
@@ -257,40 +245,9 @@ Text-based report with:
 - Anomaly log
 - Recommendations with rationale
 
-## Data Structure (analysis JSON)
-
-The JSON file saved in Phase 8 has this structure, which the Python script reads:
-
-```json
-{
-  "analysis_metadata": {
-    "data_view_name": "...",
-    "data_view_id": "...",
-    "date_range": "...",
-    "analyses_run": ["cardinality", "distribution", "trends", "anomalies", "errors", ...],
-    "generated_at": "ISO8601"
-  },
-  "dimensions": [
-    {
-      "id": "variables/page",
-      "name": "Page",
-      "cardinality": { "uniqueValueCount": 1500, "level": "HIGH", "trend": null },
-      "distribution": { "gini": 0.72, "skewLabel": "High skew", "top1Pct": 35.2, "topValues": [...] },
-      "trends": { "period1": "...", "period2": "...", "changes": [...], "newValues": [], "disappearedValues": [] },
-      "anomalies": [...],
-      "errors": { "errorPatterns": [...], "missingDataPct": 3.2, "missingDataSeverity": "warning" },
-      "forecasts": [...]
-    }
-  ],
-  "comparisons": [...],
-  "summary": {
-    "totalDimensions": 5,
-    "highCardinalityCount": 2,
-    "criticalErrorCount": 1,
-    "anomalyCount": 7
-  }
-}
-```
+The JSON schema consumed by `scripts/cja_dimension_analysis.py` is derived from the
+`Store: {...}` shapes in each phase above. The script knows its own input contract;
+build the JSON to match the per-phase Store entries.
 
 ## Example Interaction
 
