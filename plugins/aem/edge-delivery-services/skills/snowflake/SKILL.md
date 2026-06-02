@@ -255,15 +255,12 @@ proceeds. Reruns are safe — phases skip work already done.
    - **`hybrid`**: block-level for passing sections, page-level
      fragments for failing sections.
    Both `page` and `block` are supported under **either substrate
-   flavor** (`eds` or `milo`). On the `milo` flavor, read the
-   "Milo flavor deltas" section at the top of the matching path in
-   phases/3-generate.md FIRST — Milo owns the runtime, so the global
-   styles / `head.html` / `scripts.js` / header-footer-fragment steps
-   are skipped and the chrome comes from a page `metadata` block.
-   On `milo` + `block`, scroll animations are emitted as adjustable
-   `--pa-*` `animation` sidecar blocks (step B.5b), consumed by the
-   vendored `blocks/animation` runtime the substrate installs.
-   See [phases/3-generate.md](./phases/3-generate.md).
+   flavor** (`eds` or `milo`). All Milo-specific deltas — chrome
+   metadata, page-level/block-level generation, the `--pa-*` animation
+   sidecars, and wiring — live in
+   [assets/substrate-milo/FLAVOR.md](./assets/substrate-milo/FLAVOR.md);
+   the phase docs carry a gated pointer to it. The core skill stays
+   substrate-neutral. See [phases/3-generate.md](./phases/3-generate.md).
 
 4. **Wire** — copy artifacts to EDS-served paths, build the local-test
    drafts file, run lint.

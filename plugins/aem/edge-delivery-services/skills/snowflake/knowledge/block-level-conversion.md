@@ -8,9 +8,9 @@ decision criteria); this document covers the implementation.
 > (it writes `styles/styles.css`, appends `head.html`, and creates
 > `blocks/{header,footer}` + `fragments/`). On a **Milo** repo
 > (`substrateFlavor: milo`) those global/chrome steps are SKIPPED — Milo owns
-> the runtime and renders the live gnav/footer from a page `metadata` block.
-> Read the **"Milo flavor deltas"** section at the top of the Block-level path
-> in `phases/3-generate.md` before applying anything here. The decorator
+> the runtime and renders the live gnav/footer from a page `metadata` block. See
+> [../assets/substrate-milo/FLAVOR.md#generate-block](../assets/substrate-milo/FLAVOR.md)
+> for the Milo deltas (read it before applying anything here). The decorator
 > pattern, content-model design, and CSS-scoping guidance below are the same
 > for both flavors; only the global/chrome plumbing differs.
 

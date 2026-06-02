@@ -111,19 +111,16 @@ The installer auto-detects which **flavor** to install and reports it
 
 - **`milo`** (auto-detected when the repo boots milolibs — `head.html`
   contains `milolibs`, or `scripts/scripts.js` calls `setLibs()`): a
-  **minimal** substrate. It installs **only** `blocks/snowflake/{js,css}`
-  plus the ignore patches, and **leaves Milo's `head.html`,
-  `scripts/scripts.js`, and `styles/styles.css` untouched**. Replacing them
-  would rip out the Milo runtime — the very thing that loads the live
-  `global-navigation` + footer from `gnav-source`/`footer-source` metadata.
-  On a Milo repo the chrome is owned by Milo; for **page-level** the bespoke
-  body is drawn by the `snowflake` overlay block, which Milo loads from the
-  project's `codeRoot`. For **block-level** the body is real `forge-*` block
-  tables that Milo decorates directly — the installed `blocks/snowflake` block
-  is simply unused (and harmless, since no `snowflake` block is authored on a
-  block-level page), so the same minimal Milo substrate works for both levels;
-  no extra install or skip is needed. `.snowflake/config.json` records
-  `substrateFlavor: "milo"`.
+  **minimal** substrate. It installs the project-local blocks Milo auto-loads
+  from `codeRoot` (`blocks/snowflake` for the page-level overlay; `blocks/animation`
+  + `tools/page-animator` for block-level scroll animations) plus the ignore
+  patches, and **leaves Milo's `head.html`, `scripts/scripts.js`, and
+  `styles/styles.css` untouched** — replacing them would rip out the Milo runtime
+  that loads the live gnav/footer from `gnav-source`/`footer-source` metadata. The
+  same minimal substrate serves both levels (unused installed blocks are harmless).
+  `.snowflake/config.json` records `substrateFlavor: "milo"`. The per-phase Milo
+  generation deltas live in
+  [../assets/substrate-milo/FLAVOR.md](../assets/substrate-milo/FLAVOR.md).
 
 The later phases branch on `.snowflake/config.json` `substrateFlavor` — read
 it before Generate/Wire.
