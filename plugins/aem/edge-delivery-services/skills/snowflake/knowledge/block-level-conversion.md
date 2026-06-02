@@ -257,6 +257,31 @@ Some elements are structural (not authored):
 These live in the decorator, not in the DA content. The author
 controls the text/images; the decorator controls the structure.
 
+### Generator placeholder UIs are static content — reproduce verbatim
+
+A deliberate **placeholder UI** emitted by the generator is NOT a
+dynamic/commerce slot and NOT "structural scaffolding" — it is
+**visible static source content with future intent**, and the 1:1
+contract requires reproducing it exactly. Stardust marks these with
+`data-placeholder="true"` (containing `placeholder-eyebrow` +
+`placeholder-shape` spans), which render as visible text like
+**"PLACEHOLDER · price" / "e.g. US$0/mo"** or "PLACEHOLDER · image".
+
+When designing the content model, treat that placeholder text as
+authored content: carry it into a block-table row (or reproduce it
+literally in the decorator) so the rebuilt DOM shows the same
+placeholder pill the source preview shows.
+
+**Do NOT** decide a visible placeholder is "commerce-injected",
+"filled in at runtime", or otherwise dynamic and replace it with an
+em-dash, an empty node, or your own interpretation — even when the
+text literally says "PLACEHOLDER" or you happen to know the real page
+wires live pricing. The source preview is the 1:1 target; if the
+preview shows a placeholder, the block must show that placeholder. (In
+the overlay path this is the `data-slot-skip="placeholder"` rule from
+Phase 2; the block-level path has no source DOM to mark, so the
+content-model design must carry the placeholder forward instead.)
+
 ## Fonts setup
 
 - **`head.html`**: append Google Fonts (or other CDN) preconnects

@@ -194,6 +194,16 @@ editable (positional block tables). Only the global/chrome plumbing changes:
     a global `* { box-sizing: border-box }` that reaches scoped block CSS, so declare it
     per block — simplest is one reset at the top of the block CSS:
     `.forge-<name> *, .forge-<name> *::before, .forge-<name> *::after { box-sizing: border-box; }`.
+  - **Generator placeholder UIs are 1:1 content — reproduce verbatim, do NOT drop
+    them.** A visible generator placeholder (Stardust `data-placeholder="true"` with
+    `placeholder-eyebrow`/`placeholder-shape`, rendering text like "PLACEHOLDER · price /
+    e.g. US$0/mo" or "PLACEHOLDER · image") is **static source content**, not a
+    dynamic/commerce slot. Carry it into the block's content model / decorator output
+    exactly as the preview shows it. Do NOT decide it is "commerce-injected" or
+    "filled in at runtime" and replace it with an em-dash, an empty node, or your own
+    pricing — even when the text literally says "PLACEHOLDER" or you know the real page
+    wires live pricing. The preview is the 1:1 target. (See
+    `knowledge/block-level-conversion.md` §"Generator placeholder UIs".)
 - **B.5b (animation sidecars) — emit scroll animations as `animation` blocks, NOT
   bundled JS.** The Milo substrate ships a vendored `blocks/animation` runtime (+
   `tools/page-animator/controls.js`) — installed in Phase 0 — that reads a sibling

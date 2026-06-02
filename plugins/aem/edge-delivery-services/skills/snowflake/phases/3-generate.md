@@ -437,7 +437,11 @@ where `level === "block"`:
 
 1. **Design the content model** — map the section's authorable
    content to DA block table rows. See
-   `block-level-conversion.md` §"Content model design".
+   `block-level-conversion.md` §"Content model design". **Generator
+   placeholder UIs (`data-placeholder="true"` / visible "PLACEHOLDER · …"
+   text) are static source content — carry them into the content model
+   verbatim; never drop them or reinterpret them as dynamic/commerce
+   slots** (see that section's "Generator placeholder UIs" rule).
 
 2. **Write the block JS** — `blocks/<name>/<name>.js` with a
    `decorate(block)` function that reads authored rows and builds
