@@ -73,9 +73,9 @@ npx playwright --version 2>/dev/null || npm install -g playwright
 npx playwright install chromium 2>/dev/null || true
 ```
 
-### Step 2.5: Resolve Organization and Site
+### Step 2.5: Resolve Organization
 
-The login endpoint requires org and site to route to the correct identity provider. Check saved config:
+The login endpoint requires the org name. Check saved config:
 
 ```bash
 ORG=$(node -e "
@@ -85,13 +85,6 @@ ORG=$(node -e "
     process.stdout.write(c.org || '');
   } catch(e) {}
 ")
-SITE=$(node -e "
-  const fs = require('fs');
-  try {
-    const c = JSON.parse(fs.readFileSync(process.env.HOME + '/.aem/ops-config.json', 'utf8'));
-    process.stdout.write(c.site || '');
-  } catch(e) {}
-")
 # Fallback: check project-level config
 if [ -z "$ORG" ]; then
   ORG=$(cat .claude-plugin/project-config.json 2>/dev/null | node -e "
@@ -99,18 +92,31 @@ if [ -z "$ORG" ]; then
     try { process.stdout.write(JSON.parse(d).org || ''); } catch(e) {}
   ")
 fi
-echo "org=${ORG:-NOT SET} site=${SITE:-NOT SET}"
+echo "org=${ORG:-NOT SET}"
 ```
 
-**If `ORG` or `SITE` is empty**, ask the user:
+**If `ORG` is empty**, ask the user:
 
-> "I need your organization and site name to authenticate. What is your org (the `{org}` in `https://main--site--{org}.aem.page`) and site name?"
+> "I need your organization name to authenticate. You can provide either:
+> - The org name (the `{org}` in `https://main--site--{org}.aem.page`)
+> - A preview/live URL like `https://main--site--org.aem.page/`"
 
-**Do NOT proceed until both org and site are available.**
+**If user provides a URL**, parse org from it:
+
+```bash
+URL="$USER_INPUT"
+if echo "$URL" | grep -q '\.aem\.page\|\.aem\.live'; then
+  HOST_PART=$(echo "$URL" | cut -d'/' -f3 | cut -d'.' -f1)
+  ORG=$(echo "$HOST_PART" | awk -F'--' '{print $NF}')
+  echo "Parsed from URL: org=$ORG"
+fi
+```
+
+**Do NOT proceed until org is available.**
 
 ### Step 3: Capture Token via Playwright
 
-Playwright opens browser to `admin.hlx.page/login/{org}/{site}` which routes to the correct identity provider based on the project's content source. After login completes, the token is stored as the `auth_token` cookie on `admin.hlx.page`. Playwright reads this cookie, saves the token to disk, then closes the browser automatically.
+Playwright opens browser to `admin.hlx.page/login/{org}` which routes to the correct identity provider based on the org's configuration. After login completes, the token is stored as the `auth_token` cookie on `admin.hlx.page`. Playwright reads this cookie, saves the token to disk, then closes the browser automatically.
 
 ```bash
 mkdir -p "${HOME}/.aem"
@@ -122,9 +128,8 @@ const { chromium } = require('playwright');
 
 const TOKEN_PATH = path.join(process.env.HOME, '.aem', 'ims-token.json');
 const ORG = '${ORG}';
-const SITE = '${SITE}';
 
-const loginUrl = 'https://admin.hlx.page/login/' + ORG + '/' + SITE;
+const loginUrl = 'https://admin.hlx.page/login/' + ORG;
 
 (async () => {
   console.log('Opening browser for login...');
