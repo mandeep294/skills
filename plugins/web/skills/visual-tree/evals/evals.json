@@ -9,8 +9,8 @@
       "assertions": [
         {
           "type": "command_succeeds",
-          "command": "node -e \"require('./scripts/visual-tree-bundle.js')\"",
-          "description": "Visual tree bundle loads without syntax errors."
+          "command": "node --check scripts/visual-tree-bundle.js",
+          "description": "Visual tree bundle has valid syntax. (Browser-only IIFE — run in browser via initScript, not Node.)"
         }
       ]
     }

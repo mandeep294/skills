@@ -9,8 +9,8 @@
       "assertions": [
         {
           "type": "command_succeeds",
-          "command": "node -e \"import('./scripts/domain-mask.mjs').then(() => {}).catch(e => { if (e.code !== 'ERR_MODULE_NOT_FOUND') process.exit(1); })\"",
-          "description": "Domain mask script has valid ESM syntax."
+          "command": "node --check scripts/domain-mask.mjs",
+          "description": "Domain mask script has valid syntax."
         }
       ]
     }

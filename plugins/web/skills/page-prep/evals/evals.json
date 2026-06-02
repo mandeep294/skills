@@ -9,8 +9,8 @@
       "assertions": [
         {
           "type": "command_succeeds",
-          "command": "node -e \"require('./scripts/overlay-detect.js')\"",
-          "description": "Overlay detection script loads without syntax errors."
+          "command": "node --check scripts/overlay-db.js",
+          "description": "Page prep entry point script has valid syntax."
         }
       ]
     }

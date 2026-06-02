@@ -9,8 +9,8 @@
       "assertions": [
         {
           "type": "command_succeeds",
-          "command": "node -e \"require('./scripts/browser-probe.js')\"",
-          "description": "Browser probe script loads without syntax errors."
+          "command": "node --check scripts/browser-probe.js",
+          "description": "Browser probe script has valid syntax."
         }
       ]
     }

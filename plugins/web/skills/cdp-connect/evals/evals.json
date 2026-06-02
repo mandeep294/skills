@@ -9,8 +9,8 @@
       "assertions": [
         {
           "type": "command_succeeds",
-          "command": "node -e \"require('./scripts/cdp.js')\"",
-          "description": "CDP script loads without syntax errors."
+          "command": "node --check scripts/cdp.js",
+          "description": "CDP script has valid syntax."
         }
       ]
     }

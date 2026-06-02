@@ -9,8 +9,8 @@
       "assertions": [
         {
           "type": "command_succeeds",
-          "command": "node -e \"import('./scripts/cdp-ext-pilot.mjs').catch(e => process.exit(e.code === 'ERR_MODULE_NOT_FOUND' ? 1 : 0))\"",
-          "description": "CDP extension pilot script has valid ESM syntax."
+          "command": "node --check scripts/cdp-ext-pilot.mjs",
+          "description": "CDP extension pilot script has valid syntax."
         }
       ]
     }

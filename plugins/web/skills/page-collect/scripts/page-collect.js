@@ -155,7 +155,9 @@ function stripEnvelope(output) {
   const resultStart = output.indexOf('### Result');
   if (resultStart === -1) return output.trim();
   const afterResult = output.slice(resultStart + '### Result'.length);
-  const endIdx = afterResult.indexOf('### Ran Playwright code');
+  // lastIndexOf: playwright-cli always appends the marker at the very end,
+  // so the first occurrence could be inside page content (e.g. SVG text).
+  const endIdx = afterResult.lastIndexOf('### Ran Playwright code');
   return (endIdx === -1 ? afterResult : afterResult.slice(0, endIdx)).trim();
 }
 
