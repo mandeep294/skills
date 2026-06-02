@@ -56,15 +56,14 @@ error: the skill's scripts directory needs the combined bundle.
 
 ## Workflow
 
-### Step 1 — Detect browser layer
+### Step 1 — Open the URL
 
-Use the `browser-universal` skill to detect what browser tool is
-available (playwright-cli, cmux-browser, or CDP). If `browser-universal`
-is not available, fall back to `playwright-cli` directly.
+Uses `playwright-cli` as the browser layer. Run `playwright-cli --help`
+for the command reference.
 
 ### Step 2 — Navigate and prepare the page
 
-1. Open the URL in the browser
+1. Open the URL with `playwright-cli open <url>`
 2. Wait for network idle (or equivalent for the browser layer)
 3. If the `page-prep` skill is available, invoke it to dismiss cookie
    banners, GDPR consent modals, and other overlays
@@ -82,22 +81,42 @@ is not available, fall back to `playwright-cli` directly.
 
 ### Step 3 — Inject the bundle and run Phase 1
 
-Inject the bundle script found in Step 0 into the page. The bundle
-contains both the blueprint detector and the reducer.
+Inject the bundle via `initScript` in a playwright-cli `--config` JSON, along with a
+bootstrap script that runs detection asynchronously after the page loads and stores the
+result in `window.__reduceResult`. Then read it via a synchronous `eval` expression.
 
-After injection, execute in the page context:
+**Why this pattern:** `playwright-cli eval` is expression-only and cannot `await`.
+The bootstrap runs the async work during page load, so the eval only needs to read
+the already-resolved result.
 
-```js
-// Run detection
-await window.xp.detectSections(document.body, window, {
-  autoDetect: true,
-  highlightBoxes: false,
-  highlightSections: false,
+```bash
+REDUCE_CONFIG="/tmp/reduce-config-$$.json"
+BOOTSTRAP="/tmp/reduce-bootstrap-$$.js"
+
+# Bootstrap: runs async detection after page load, stores result
+cat > "$BOOTSTRAP" << 'EOF'
+window.addEventListener('load', async () => {
+  await window.xp.detectSections(document.body, window, {
+    autoDetect: true,
+    highlightBoxes: false,
+    highlightSections: false,
+  });
+  window.__reduceResult = window.__reduceForSkill(document.body, window);
 });
+EOF
 
-// Run Phase 1 reduction (on clones — non-destructive)
-const result = window.__reduceForSkill(document.body, window);
-JSON.stringify(result);
+# Config: inject bundle first (exposes window.xp + window.__reduceForSkill),
+# then bootstrap (runs detection after load)
+echo "{\"browser\":{\"initScript\":[\"$BUNDLE\",\"$BOOTSTRAP\"]}}" > "$REDUCE_CONFIG"
+
+# Open page — initScripts run before any page JS
+playwright-cli open "$URL" --config="$REDUCE_CONFIG"
+sleep 3  # wait for load + async detection to complete
+
+# Read result — pure expression, no await needed
+RESULT=$(playwright-cli eval "JSON.stringify(window.__reduceResult)")
+
+rm -f "$REDUCE_CONFIG" "$BOOTSTRAP"
 ```
 
 Parse the returned JSON. This is the Phase 1 output:
@@ -210,9 +229,8 @@ These tokens are produced by the browser script (Phase 1):
 
 ## Dependencies
 
-- A browser layer: `playwright-cli` (preferred), `cmux-browser`, or CDP
-- Sibling skills (optional, degrade gracefully if missing):
-  - `browser-universal` — browser layer detection
+- `playwright-cli` on PATH (the browser layer)
+- Sibling skill (optional, degrades gracefully if missing):
   - `page-prep` — overlay dismissal
 
 ## Updating the Bundle

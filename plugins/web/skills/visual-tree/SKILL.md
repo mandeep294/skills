@@ -1,7 +1,7 @@
 ---
 name: visual-tree
 license: Apache-2.0
-compatibility: Requires playwright-cli on PATH. See the browser-universal skill for layer detection and install guidance.
+compatibility: Requires playwright-cli on PATH. Run `playwright-cli --help` for usage.
 description: >-
   Capture a spatial hierarchy of rendered DOM elements from any webpage.
   Injects a pre-built script via playwright-cli that walks the DOM, detects

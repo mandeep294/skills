@@ -1,7 +1,8 @@
 #!/usr/bin/env node
+'use strict';
 
 /**
- * page-collect — Extract structured resources from a webpage.
+ * page-collect — Extract structured resources from a webpage via playwright-cli.
  *
  * Usage:
  *   node page-collect.js <subcommand> <url> [--output <dir>] [--browser-recipe <path>]
@@ -14,200 +15,374 @@
  *   forms     Extract form structures
  *   videos    Extract video embeds
  *   socials   Extract social media links
+ *
+ * Requires playwright-cli on PATH.
  */
 
-import { mkdir, writeFile } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
-import { collectIcons } from './collect-icons.js';
-import { collectMetadata } from './collect-metadata.js';
-import { collectText } from './collect-text.js';
-import { collectForms } from './collect-forms.js';
-import { collectVideos } from './collect-videos.js';
-import { collectSocials } from './collect-socials.js';
+const { spawnSync } = require('node:child_process');
+const { mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } = require('node:fs');
+const { mkdir, writeFile } = require('node:fs/promises');
+const { join, resolve, dirname } = require('node:path');
+const { tmpdir } = require('node:os');
 
-const COLLECTORS = {
-  icons: collectIcons,
-  metadata: collectMetadata,
-  text: collectText,
-  forms: collectForms,
-  videos: collectVideos,
-  socials: collectSocials,
-};
+const SUBCOMMANDS = ['all', 'icons', 'metadata', 'text', 'forms', 'videos', 'socials'];
 
-export function parseArgs(argv) {
+// ─── Icon processing (Node-side pure functions) ──────────────────────────────
+
+const ICON_MAX_SIZE = 48;
+
+const KNOWN_PATTERNS = [
+  'search', 'cart', 'account', 'user', 'menu',
+  'hamburger', 'close', 'globe', 'language', 'phone',
+  'mail', 'email', 'heart', 'star', 'share',
+  'download', 'arrow', 'chevron', 'caret', 'plus',
+  'minus', 'check', 'info', 'warning', 'home',
+  'settings', 'notification', 'bell', 'lock',
+];
+
+function classify(entry) {
+  const maxDim = Math.max(entry.width, entry.height);
+  const allClasses = [
+    entry.parentClass, entry.containerClass,
+    entry.imgClass, entry.svgClass, entry.className,
+  ].filter(Boolean).join(' ').toLowerCase();
+  const alt = (entry.alt || entry.parentAriaLabel || '').toLowerCase();
+
+  if (allClasses.includes('logo') || allClasses.includes('brand') || alt.includes('logo')) {
+    return 'logo';
+  }
+  if (maxDim > ICON_MAX_SIZE && !entry.parentTag) return 'image';
+  return 'icon';
+}
+
+function deriveName(entry, index) {
+  const candidates = [entry.parentAriaLabel, entry.alt, entry.id].filter(Boolean);
+  const allClasses = [entry.parentClass, entry.imgClass, entry.svgClass, entry.className]
+    .filter(Boolean).join(' ').toLowerCase();
+
+  for (const pattern of KNOWN_PATTERNS) {
+    if (allClasses.includes(pattern)) return { name: pattern, confidence: 'high' };
+  }
+  for (const candidate of candidates) {
+    const clean = candidate.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (clean.length > 0 && clean.length < 30) return { name: clean, confidence: 'high' };
+  }
+  return { name: `icon-${index}`, confidence: 'low' };
+}
+
+function optimizeSvg(svgString, classification) {
+  let svg = svgString;
+  svg = svg.replace(/<\?xml[^?]*\?>\s*/g, '');
+  svg = svg.replace(/<!--[\s\S]*?-->/g, '');
+  svg = svg.replace(/<metadata[\s\S]*?<\/metadata>/gi, '');
+  svg = svg.replace(/<title[\s\S]*?<\/title>/gi, '');
+  svg = svg.replace(/<desc[\s\S]*?<\/desc>/gi, '');
+  svg = svg.replace(
+    /\s*(xmlns:xlink|xmlns:sketch|xmlns:dc|xmlns:cc|xmlns:rdf|xmlns:sodipodi|xmlns:inkscape)="[^"]*"/g, ''
+  );
+  svg = svg.replace(/\s*(sketch:|sodipodi:|inkscape:)[a-z-]+="[^"]*"/gi, '');
+  svg = svg.replace(/\s*data-name="[^"]*"/g, '');
+  svg = svg.replace(/\s*(?:class|aria-hidden|focusable|display|style)="[^"]*"/g, '');
+
+  if (!svg.includes('viewBox')) {
+    const wMatch = svg.match(/\bwidth=["'](\d+(?:\.\d+)?)["']/);
+    const hMatch = svg.match(/\bheight=["'](\d+(?:\.\d+)?)["']/);
+    if (wMatch && hMatch) {
+      svg = svg.replace('<svg', `<svg viewBox="0 0 ${wMatch[1]} ${hMatch[1]}"`);
+    }
+  }
+  svg = svg.replace(/\s*(?<![\w-])width=["'][^"']*["']/g, '');
+  svg = svg.replace(/\s*(?<![\w-])height=["'][^"']*["']/g, '');
+
+  if (classification === 'icon') {
+    svg = svg.replace(/\b(fill|stroke)="(?!none|currentColor|transparent)[^"]+"/g, '$1="currentColor"');
+    svg = svg.replace(/\b(fill|stroke)='(?!none|currentColor|transparent)[^']+'/g, "$1='currentColor'");
+  }
+  svg = svg.replace(/\s{2,}/g, ' ').replace(/>\s+</g, '><').trim();
+  return svg;
+}
+
+// ─── Argument parsing ────────────────────────────────────────────────────────
+
+function parseArgs(argv) {
   const args = argv.slice(2);
   const subcommand = args[0];
-  const url = args.find(
-    (a) => a.startsWith('http') || a.startsWith('file://')
-  );
+  const url = args.find((a) => a.startsWith('http') || a.startsWith('file://'));
   let output = './page-collect-output';
 
   const outputIdx = args.indexOf('--output');
-  if (outputIdx !== -1 && args[outputIdx + 1]) {
-    output = args[outputIdx + 1];
-  }
+  if (outputIdx !== -1 && args[outputIdx + 1]) output = args[outputIdx + 1];
 
   const recipeIdx = args.indexOf('--browser-recipe');
-  const browserRecipe = (recipeIdx !== -1 && args[recipeIdx + 1])
-    ? args[recipeIdx + 1]
-    : null;
+  const browserRecipe = (recipeIdx !== -1 && args[recipeIdx + 1]) ? args[recipeIdx + 1] : null;
 
   if (!subcommand || !url) {
-    console.error(
-      'Usage: node page-collect.js <subcommand> <url>'
-        + ' [--output <dir>] [--browser-recipe <path>]'
-    );
-    console.error(
-      'Subcommands: all, icons, metadata, text, forms, videos, socials'
+    process.stderr.write(
+      'Usage: node page-collect.js <subcommand> <url> [--output <dir>] [--browser-recipe <path>]\n'
+      + `Subcommands: ${SUBCOMMANDS.join(', ')}\n`
     );
     process.exit(1);
   }
-
-  if (subcommand !== 'all' && !COLLECTORS[subcommand]) {
-    console.error(`Unknown subcommand: ${subcommand}`);
-    console.error(
-      'Valid subcommands: all, icons, metadata, text, forms, videos, socials'
-    );
+  if (!SUBCOMMANDS.includes(subcommand)) {
+    process.stderr.write(`Unknown subcommand: ${subcommand}\nValid: ${SUBCOMMANDS.join(', ')}\n`);
     process.exit(1);
   }
-
   return { subcommand, url, output: resolve(output), browserRecipe };
 }
 
-export function applyBrowserRecipe(recipePath) {
-  if (!recipePath) {
-    return {
-      launchOptions: { headless: true },
-      userAgent: null,
-      stealthScript: null,
-    };
-  }
+// ─── Browser recipe ──────────────────────────────────────────────────────────
 
+function loadBrowserRecipe(recipePath) {
+  if (!recipePath) return { cliConfig: {}, stealthScript: null };
   let recipe;
   try {
     recipe = JSON.parse(readFileSync(recipePath, 'utf-8'));
   } catch (err) {
-    console.error(
-      `Failed to load browser recipe from ${recipePath}: ${err.message}`
+    process.stderr.write(`Failed to load browser recipe from ${recipePath}: ${err.message}\n`);
+    process.exit(1);
+  }
+  return { cliConfig: recipe.cliConfig || {}, stealthScript: recipe.stealthInitScript || null };
+}
+
+// ─── Envelope stripping ──────────────────────────────────────────────────────
+
+/**
+ * playwright-cli wraps run-code/eval output in:
+ *   ### Result\n<content>\n### Ran Playwright code
+ * Strip the envelope if present.
+ */
+function stripEnvelope(output) {
+  const resultStart = output.indexOf('### Result');
+  if (resultStart === -1) return output.trim();
+  const afterResult = output.slice(resultStart + '### Result'.length);
+  const endIdx = afterResult.indexOf('### Ran Playwright code');
+  return (endIdx === -1 ? afterResult : afterResult.slice(0, endIdx)).trim();
+}
+
+// ─── playwright-cli helpers ──────────────────────────────────────────────────
+
+function detectPlaywrightCli() {
+  const check = spawnSync('playwright-cli', ['--version'], { encoding: 'utf-8' });
+  if (check.error || check.status !== 0) {
+    process.stderr.write(
+      'playwright-cli not found. Run `playwright-cli --help` for install guidance.\n'
     );
     process.exit(1);
   }
-  const launchOpts = recipe.cliConfig?.browser?.launchOptions || {};
+}
 
-  const launchOptions = { headless: true };
-  if (launchOpts.channel) {
-    launchOptions.channel = launchOpts.channel;
-  }
-
-  let userAgent = null;
-  const uaArg = (launchOpts.args || [])
-    .find((a) => a.startsWith('--user-agent='));
-  if (uaArg) {
-    userAgent = uaArg.split('=').slice(1).join('=');
-  }
-
-  return {
-    launchOptions,
-    userAgent,
-    stealthScript: recipe.stealthInitScript || null,
+function buildCliConfig(cliConfig, bundlePath, stealthScript, tmpPrefix) {
+  const config = {
+    browser: { ...cliConfig.browser, initScript: [] },
   };
-}
-
-function detectPlaywright() {
-  try {
-    execSync('npx playwright --version', { stdio: 'pipe' });
-  } catch {
-    console.error(
-      'Playwright not found. Install with: npx playwright install chromium'
-    );
-    process.exit(1);
+  if (stealthScript) {
+    const stealthPath = `${tmpPrefix}-stealth.js`;
+    writeFileSync(stealthPath, stealthScript);
+    config.browser.initScript.push(stealthPath);
   }
+  config.browser.initScript.push(bundlePath);
+  return config;
 }
 
-async function launchBrowser(url, recipeOpts) {
-  detectPlaywright();
+// ─── Icon output writer ──────────────────────────────────────────────────────
 
-  const { chromium } = await import('playwright');
-  const browser = await chromium.launch(recipeOpts.launchOptions);
-  const context = await browser.newContext({
-    viewport: { width: 1440, height: 900 },
-    userAgent: recipeOpts.userAgent
-      || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
-        + 'AppleWebKit/537.36 (KHTML, like Gecko) '
-        + 'Chrome/120.0.0.0 Safari/537.36',
-  });
-  const page = await context.newPage();
+async function writeIcons(svgs, url, outputDir) {
+  const iconsDir = join(outputDir, 'icons');
+  await mkdir(iconsDir, { recursive: true });
 
-  if (recipeOpts.stealthScript) {
-    await page.addInitScript(recipeOpts.stealthScript);
+  const icons = [];
+  let unnamedIndex = 1;
+  const usedNames = new Set();
+  const nameCollisionCounts = new Map();
+
+  for (const entry of svgs) {
+    const classification = classify(entry);
+    if (classification === 'image') continue;
+
+    let svgContent = null;
+    if (entry.source === 'inline-svg') {
+      svgContent = entry.svg;
+    } else if (entry.source === 'img-svg') {
+      svgContent = entry.resolvedSvg || null;
+    } else if (entry.source === 'css-bg-svg') {
+      svgContent = entry.resolvedSvg || null;
+    } else if (entry.source === 'svg-sprite') {
+      if (entry.symbolSvg) {
+        svgContent = entry.symbolSvg
+          .replace(/^<symbol/, '<svg xmlns="http://www.w3.org/2000/svg"')
+          .replace(/<\/symbol>$/, '</svg>');
+      } else {
+        svgContent = entry.fallbackSvg;
+      }
+    }
+
+    if (!svgContent) continue;
+
+    const { name: rawName, confidence } = deriveName(entry, unnamedIndex);
+    let name = rawName;
+    if (usedNames.has(name)) {
+      const count = (nameCollisionCounts.get(rawName) || 1) + 1;
+      nameCollisionCounts.set(rawName, count);
+      name = `${rawName}-${count}`;
+    }
+    if (confidence === 'low') unnamedIndex++;
+    usedNames.add(name);
+
+    const optimized = optimizeSvg(svgContent, classification);
+    const filename = `${name}.svg`;
+    await writeFile(join(iconsDir, filename), optimized);
+
+    const context = [
+      entry.containerTag ? entry.containerTag.toLowerCase() : '',
+      entry.parentTag    ? entry.parentTag.toLowerCase()    : '',
+      entry.parentAriaLabel || '',
+    ].filter(Boolean).join(' ');
+
+    icons.push({
+      name,
+      class: classification,
+      source: entry.source,
+      file: `icons/${filename}`,
+      nameConfidence: confidence,
+      context: context || 'unknown',
+    });
   }
 
-  console.error(`Navigating to ${url}...`);
-  await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
-  await page.waitForTimeout(2000);
-
-  return { browser, page };
+  const manifest = { url, icons };
+  await writeFile(join(outputDir, 'icons.json'), JSON.stringify(manifest, null, 2));
+  return manifest;
 }
 
-async function takeScreenshot(page, outputDir) {
-  const screenshotPath = join(outputDir, 'screenshot.jpg');
-  await page.screenshot({
-    path: screenshotPath,
-    fullPage: true,
-    type: 'jpeg',
-    quality: 80,
-  });
-  return 'screenshot.jpg';
-}
+// ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
   const { subcommand, url, output, browserRecipe } = parseArgs(process.argv);
+
+  detectPlaywrightCli();
   await mkdir(output, { recursive: true });
 
-  const recipeOpts = applyBrowserRecipe(browserRecipe);
-  const { browser, page } = await launchBrowser(url, recipeOpts);
+  const { cliConfig, stealthScript } = loadBrowserRecipe(browserRecipe);
+  const scriptDir = dirname(require.resolve('./page-collect.js'));
+  const bundlePath = join(scriptDir, 'page-collect-bundle.js');
+  const tmpPrefix = join(tmpdir(), `page-collect-${process.pid}`);
+
+  // Build playwright-cli --config JSON
+  const config = buildCliConfig(cliConfig, bundlePath, stealthScript, tmpPrefix);
+  const configPath = `${tmpPrefix}-config.json`;
+  writeFileSync(configPath, JSON.stringify(config));
+
+  // Write the run-code extraction script
+  const collectors = subcommand === 'all' ? null : [subcommand];
+  const runCodePath = `${tmpPrefix}-extract.js`;
+  writeFileSync(
+    runCodePath,
+    `async page => {\n  return await page.evaluate(`
+    + `(c) => window.__pageCollect.extract(c), ${JSON.stringify(collectors)});\n}`
+  );
+
+  const cleanup = () => {
+    for (const p of [configPath, runCodePath, `${tmpPrefix}-stealth.js`]) {
+      if (existsSync(p)) rmSync(p, { force: true });
+    }
+  };
 
   try {
-    if (subcommand === 'all') {
-      const screenshot = await takeScreenshot(page, output);
-      const results = {};
+    // Open the URL with bundle injected
+    process.stderr.write(`Navigating to ${url}...\n`);
+    const openResult = spawnSync(
+      'playwright-cli',
+      ['open', url, `--config=${configPath}`],
+      { encoding: 'utf-8' }
+    );
+    if (openResult.error) throw new Error(`playwright-cli open failed: ${openResult.error.message}`);
+    if (openResult.status !== 0) {
+      throw new Error(`playwright-cli open exited ${openResult.status}: ${openResult.stderr}`);
+    }
 
-      for (const [name, collector] of Object.entries(COLLECTORS)) {
-        console.error(`Running ${name} collector...`);
-        results[name] = await collector(page, output);
+    // Run extraction
+    process.stderr.write('Extracting page resources...\n');
+    const runResult = spawnSync(
+      'playwright-cli',
+      ['run-code', `--filename=${runCodePath}`],
+      { encoding: 'utf-8', maxBuffer: 100 * 1024 * 1024 }
+    );
+    if (runResult.error) throw new Error(`playwright-cli run-code failed: ${runResult.error.message}`);
+    if (runResult.status !== 0) {
+      throw new Error(`playwright-cli run-code exited ${runResult.status}: ${runResult.stderr}`);
+    }
+
+    const raw = stripEnvelope(runResult.stdout);
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (err) {
+      throw new Error(`Failed to parse extraction result: ${err.message}\nRaw: ${raw.slice(0, 500)}`);
+    }
+
+    // Process and write output
+    if (subcommand === 'all') {
+      // Screenshot via playwright-cli
+      const screenshotPath = join(output, 'screenshot.jpg');
+      spawnSync('playwright-cli', ['screenshot', '--filename', screenshotPath], {
+        encoding: 'utf-8',
+      });
+
+      const results = {};
+      if (data.svgs) {
+        process.stderr.write('Processing icons...\n');
+        results.icons = await writeIcons(data.svgs, data.url, output);
+      }
+      if (data.metadata) {
+        results.metadata = data.metadata;
+        await writeFile(join(output, 'metadata.json'), JSON.stringify(data.metadata, null, 2));
+      }
+      if (data.text) {
+        results.text = data.text;
+        await writeFile(join(output, 'text.json'), JSON.stringify(data.text, null, 2));
+      }
+      if (data.forms) {
+        results.forms = data.forms;
+        await writeFile(join(output, 'forms.json'), JSON.stringify(data.forms, null, 2));
+      }
+      if (data.videos) {
+        results.videos = data.videos;
+        await writeFile(join(output, 'videos.json'), JSON.stringify(data.videos, null, 2));
+      }
+      if (data.socials) {
+        results.socials = data.socials;
+        await writeFile(join(output, 'socials.json'), JSON.stringify(data.socials, null, 2));
       }
 
       const collection = {
-        url,
+        url: data.url,
         collectedAt: new Date().toISOString(),
-        screenshot,
+        screenshot: 'screenshot.jpg',
         collectors: results,
       };
+      await writeFile(join(output, 'collection.json'), JSON.stringify(collection, null, 2));
+      process.stderr.write(`Done. Output: ${output}/collection.json\n`);
 
-      await writeFile(
-        join(output, 'collection.json'),
-        JSON.stringify(collection, null, 2)
-      );
-      console.error(`Done. Output: ${output}/collection.json`);
+    } else if (subcommand === 'icons') {
+      const manifest = await writeIcons(data.svgs || [], data.url, output);
+      await writeFile(join(output, 'icons.json'), JSON.stringify(manifest, null, 2));
+      process.stderr.write(`Done. Output: ${output}/icons.json\n`);
+
     } else {
-      console.error(`Running ${subcommand} collector...`);
-      const result = await COLLECTORS[subcommand](page, output);
-
-      const outputFile = `${subcommand}.json`;
-      await writeFile(
-        join(output, outputFile),
-        JSON.stringify(result, null, 2)
-      );
-      console.error(`Done. Output: ${output}/${outputFile}`);
+      const result = data[subcommand];
+      await writeFile(join(output, `${subcommand}.json`), JSON.stringify(result, null, 2));
+      process.stderr.write(`Done. Output: ${output}/${subcommand}.json\n`);
     }
+
   } finally {
-    await browser.close();
+    cleanup();
   }
 }
 
-const isMain = process.argv[1]
-  && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMain) main();
+if (require.main === module) {
+  main().catch((err) => {
+    process.stderr.write(`Error: ${err.message}\n`);
+    process.exit(1);
+  });
+}
+
+module.exports = { parseArgs, loadBrowserRecipe, classify, deriveName, optimizeSvg };

@@ -1,13 +1,14 @@
 ---
 name: page-collect
 license: Apache-2.0
-compatibility: Requires Node 22+. Run `npm install` once in the skill's scripts/ directory to pin Playwright 1.59.1.
-description: Extract structured resources (icons, metadata, text, forms, videos, social links) from any webpage using Playwright. Supports individual collectors via subcommands (icons, metadata, text, forms, videos, socials) or all at once. The icon collector classifies SVGs as icon/logo/image based on size and DOM context, optimizes them for EDS, and outputs to /icons/ for use with decorateIcons(). Use when migrating pages, auditing sites, or extracting assets.
+compatibility: Requires Node 22+ and playwright-cli on PATH. Run `playwright-cli --help` for usage.
+description: Extract structured resources (icons, metadata, text, forms, videos, social links) from any webpage using playwright-cli. Supports individual collectors via subcommands (icons, metadata, text, forms, videos, socials) or all at once. The icon collector classifies SVGs as icon/logo/image based on size and DOM context, optimizes them for EDS, and outputs to /icons/ for use with decorateIcons(). Use when migrating pages, auditing sites, or extracting assets.
 ---
 
 # page-collect
 
-Extract structured resources from any webpage via Playwright.
+Extract structured resources from any webpage via `playwright-cli`.
+Node 22+ required. Run `playwright-cli --help` for the command reference.
 
 ## Subcommands
 
@@ -45,7 +46,8 @@ Default output: `./page-collect-output/`
 
 ### Prerequisites
 
-Playwright must be installed: `npx playwright install chromium`
+`playwright-cli` must be on PATH. Optionally pass `--browser-recipe <path>` to
+use a `browser-recipe.json` from the `browser-probe` skill to bypass bot protection.
 
 ## Icon Collector Details
 

@@ -147,6 +147,8 @@ with a broken configuration.
 
 ## How Consumers Use the Recipe
 
+Run `playwright-cli --help` for the full command reference.
+
 Any script using `playwright-cli` can consume `browser-recipe.json`:
 
 1. Write `cliConfig` to a temp file (e.g., `/tmp/probe-cli-config.json`)

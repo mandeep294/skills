@@ -5,20 +5,21 @@ description: >-
   Prepare any webpage for clean interaction by detecting and removing disruptive
   overlays (cookie banners, GDPR consent, modals, popups, newsletter signups,
   paywalls, login walls). Uses a cached database of 300+ known CMPs
-  (Consent-O-Matic + EasyList) combined with heuristic DOM scanning. Produces
-  portable JS recipes for any browser tool (Playwright, CDP, cmux-browser).
-  ALWAYS use this skill before taking screenshots, scraping content, or
-  automating interaction on any webpage that might have overlays blocking the
-  view or preventing interaction. Triggers on: page prep, clean page, remove
-  overlays, dismiss cookie banner, page blocked, overlay cleanup, consent
-  banner, prepare page, unblock page, clear popups, cookie popup.
+  (Consent-O-Matic + EasyList) combined with heuristic DOM scanning. Injects
+  a self-contained script via playwright-cli. ALWAYS use this skill before
+  taking screenshots, scraping content, or automating interaction on any
+  webpage that might have overlays blocking the view or preventing interaction.
+  Triggers on: page prep, clean page, remove overlays, dismiss cookie banner,
+  page blocked, overlay cleanup, consent banner, prepare page, unblock page,
+  clear popups, cookie popup.
 ---
 
 # Page Prep
 
 Detect and remove overlays (cookie banners, GDPR consent, modals, paywalls,
 login walls) before screenshots, scraping, or browser automation.
-Node 22+ required. No npm dependencies.
+Uses `playwright-cli` as the browser layer. Node 22+ required. No npm
+dependencies. Run `playwright-cli --help` for the command reference.
 
 ## Mode
 
@@ -71,11 +72,15 @@ BUNDLE="$(node "$PAGE_PREP_DIR/overlay-db.js" bundle)"
 Captures a self-contained JS string (no imports, no external deps) to stdout.
 The bundled script embeds the full CMP database and heuristic scanner.
 
-### Step 4 — Inject via browser tool
+### Step 4 — Inject via playwright-cli
 
-Evaluate `$BUNDLE` in the active page using whichever browser tool is in use
-(see Browser Tool Examples). The script runs synchronously and returns a
-detection report.
+Evaluate `$BUNDLE` in the active page via `playwright-cli eval`. The bundle
+is an IIFE expression so eval (expression-only) accepts it directly. It runs
+synchronously and returns a detection report.
+
+```bash
+playwright-cli eval "$(node "$PAGE_PREP_DIR/overlay-db.js" bundle)"
+```
 
 ### Step 5 — Read the detection report
 
@@ -113,7 +118,7 @@ manifest (see Recipe Manifest Format). Include the global `scroll_fix` if
 
 **Quick mode — hide-only:**
 
-1. Batch-evaluate all `hide.js` rules in one `browser_evaluate` call.
+1. Batch-evaluate all `hide.js` rules in one `playwright-cli eval` call.
 2. Apply `scroll_fix` if `scroll_locked` is true.
 3. Skip interactive dismiss entirely.
 
@@ -136,20 +141,12 @@ miss iframes and elements outside the main document tree.
 
 Run this check to find remaining blockers:
 
-```js
-JSON.stringify([...document.querySelectorAll('*')].filter(el => {
-  var s = getComputedStyle(el);
-  return s.position === 'fixed' && parseInt(s.zIndex, 10) > 1000
-    && (el.offsetWidth > 100 || el.offsetHeight > 100);
-}).map(el => {
-  var s = getComputedStyle(el);
-  return { tag: el.tagName, id: el.id, cls: (el.className || '').slice(0, 50),
-    z: s.zIndex, w: el.offsetWidth, h: el.offsetHeight };
-}))
+```bash
+playwright-cli eval "[...document.querySelectorAll('*')].filter(el => { var s = getComputedStyle(el); return s.position === 'fixed' && parseInt(s.zIndex, 10) > 1000 && (el.offsetWidth > 100 || el.offsetHeight > 100); }).map(el => { var s = getComputedStyle(el); return { tag: el.tagName, id: el.id, cls: (el.className || '').slice(0, 50), z: s.zIndex, w: el.offsetWidth, h: el.offsetHeight }; })"
 ```
 
-Evaluate this via the browser tool. It returns all visible `position:fixed`
-elements with `z-index > 1000` and non-trivial dimensions. Ignore
+This returns all visible `position:fixed` elements with `z-index > 1000` and
+non-trivial dimensions. Ignore
 legitimate elements (navigation bars, toolbars) and remove the rest:
 
 1. For each suspicious element, evaluate
@@ -165,7 +162,7 @@ The DOM check misses iframes, Shadow DOM, absolute-positioned overlays,
 and `<dialog>::backdrop`. A viewport screenshot catches what DOM queries
 cannot.
 
-1. Take a **viewport screenshot** (not fullpage) via the active browser tool.
+1. Take a **viewport screenshot** (not fullpage) via `playwright-cli screenshot --filename=/tmp/page-prep-check.png`.
    Overlays use `position:fixed` and are always visible in the viewport
    regardless of scroll position.
 2. Visually analyze the screenshot: are there visible overlays, banners,
@@ -187,28 +184,16 @@ judgment.
 For multi-step sessions where new overlays may appear (SPAs, lazy-loaded
 banners), inject the watch mode snippet after cleanup (see Watch Mode).
 
-## Browser Tool Examples
+## Injecting the Bundle
 
-### Playwright MCP
-
-```js
-// Inject and capture report
-const report = await browser_evaluate({
-  expression: BUNDLE  // the string captured from `bundle`
-});
-```
-
-### CDP connect
+The bundle produced by `overlay-db.js bundle` is a self-contained IIFE expression.
+Inject it into the active page with:
 
 ```bash
-node "$CDP_JS" eval "$(node "$PAGE_PREP_DIR/overlay-db.js" bundle)"
+playwright-cli eval "$(node "$PAGE_PREP_DIR/overlay-db.js" bundle)"
 ```
 
-### cmux-browser
-
-```bash
-cmux browser --surface <ref> eval "$(node "$PAGE_PREP_DIR/overlay-db.js" bundle)"
-```
+The return value is the JSON detection report (see Detection Report Format).
 
 ## Detection Report Format
 
