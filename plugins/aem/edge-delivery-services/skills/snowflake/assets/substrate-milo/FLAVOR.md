@@ -223,10 +223,23 @@ editable (positional block tables). Only the global/chrome plumbing changes:
       view()` is scroll-position-driven, an above-the-fold hero is already past its
       entry range at scroll 0 and renders settled (no jank/LCP cost) — emit it anyway
       for consistency; it just won't visibly move.
-    - `preserve`: only where the **source** had motion (Match path). Map enter/reveal/
-      translate/scale/blur to `--pa-*`. Leave true cinematics (Lenis/GSAP scrub,
-      pinning) as the existing bundled `scripts/<page>-animations.js` — they don't
-      reduce to the `--pa-*` model.
+    - `preserve`: re-express the **source** section's scroll motion as adjustable
+      `--pa-*` reveals. The source's own animation JS (Lenis/GSAP/`data-anim`/IO) is
+      **stripped during block conversion** — so capture the *intent* as sidecar data,
+      never re-inline the JS:
+      - enter/reveal (IntersectionObserver, `data-anim`, fade-up) → `--pa-opacity-from`
+        + `--pa-translate-y` on an `entry` range.
+      - scale-in / blur-in → `--pa-scale` / `--pa-blur`.
+      - parallax / translate-on-scroll → **approximate** as a `--pa-translate-y` reveal.
+        Ryan's panel/runtime is an entry-based *reveal* model (props animate from an
+        offset to settled), not a continuous-parallax model, so true parallax cannot
+        round-trip — an approximate reveal is the correct, panel-adjustable substitute.
+      - **Do NOT inline Lenis/GSAP or any scroll-listener JS into block code** (block
+        JS stays decorator-only). **Smooth-scroll is already free**: Milo auto-inits
+        Lenis on every `foundation: c2` page (`milo/libs/utils/utils.js`), so the
+        deployed page has the smooth feel without any vendored scroll engine.
+      - Where a section had no source motion, fall back to the `default` reveal.
+      - True pin/scrub timelines (GSAP ScrollTrigger): skip and log — don't fake them.
     - `off`: emit no `animation` blocks.
   - **Reduced motion:** the design tokens already include a reduced-motion guard via the
     runtime; do not duplicate it per block.
