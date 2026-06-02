@@ -71,7 +71,6 @@ BUNDLE="$(node "$PAGE_PREP_DIR/overlay-db.js" bundle)"
 ```
 
 Captures a self-contained JS string (no imports, no external deps) to stdout.
-The bundled script embeds the full CMP database and heuristic scanner.
 
 ### Step 4 — Inject via playwright-cli
 
@@ -131,13 +130,7 @@ screenshot check runs only in thorough mode.
 
 #### Step 9a — DOM residual check (both modes)
 
-The detection script catches known CMPs and common heuristic patterns, but
-it will miss overlays that don't fit those signals — third-party login
-prompts (Google One Tap, Apple Sign In), custom-built modals, iframes, or
-elements injected after the initial scan. Accessibility tree snapshots also
-miss iframes and elements outside the main document tree.
-
-Run this check to find remaining blockers:
+Find remaining `position:fixed` blockers the script didn't catch:
 
 ```bash
 playwright-cli eval "[...document.querySelectorAll('*')].filter(el => { var s = getComputedStyle(el); return s.position === 'fixed' && parseInt(s.zIndex, 10) > 1000 && (el.offsetWidth > 100 || el.offsetHeight > 100); }).map(el => { var s = getComputedStyle(el); return { tag: el.tagName, id: el.id, cls: (el.className || '').slice(0, 50), z: s.zIndex, w: el.offsetWidth, h: el.offsetHeight }; })"
@@ -156,13 +149,7 @@ In quick mode, stop here. In thorough mode, continue to Step 9b.
 
 #### Step 9b — Viewport screenshot verification (thorough mode only)
 
-The DOM check misses iframes, Shadow DOM, absolute-positioned overlays,
-and `<dialog>::backdrop`. A viewport screenshot catches what DOM queries
-cannot.
-
 1. Take a **viewport screenshot** (not fullpage) via `playwright-cli screenshot --filename=/tmp/page-prep-check.png`.
-   Overlays use `position:fixed` and are always visible in the viewport
-   regardless of scroll position.
 2. Visually analyze the screenshot: are there visible overlays, banners,
    modals, or backdrop dimming still present?
 3. If the page is clean: verification complete.
