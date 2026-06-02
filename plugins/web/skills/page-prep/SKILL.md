@@ -185,17 +185,6 @@ judgment.
 For multi-step sessions where new overlays may appear (SPAs, lazy-loaded
 banners), inject the watch mode snippet after cleanup (see Watch Mode).
 
-## Injecting the Bundle
-
-The bundle produced by `overlay-db.js bundle` is a self-contained IIFE expression.
-Inject it into the active page with:
-
-```bash
-playwright-cli eval "$(node "$PAGE_PREP_DIR/overlay-db.js" bundle)"
-```
-
-The return value is the JSON detection report (see Detection Report Format).
-
 ## Detection Report Format
 
 ```jsonc
@@ -229,21 +218,13 @@ The return value is the JSON detection report (see Detection Report Format).
 
 ## Recipe Manifest Format
 
-```jsonc
+```json
 {
   "overlays": [
     {
       "id": "cookiebot",
-      "hide": {
-        "css": ["#CybotCookiebotDialog { display: none !important; }"],
-        "js": "document.querySelector('#CybotCookiebotDialog')?.remove()"
-      },
-      "dismiss": {
-        "steps": [
-          { "action": "click", "selector": "#CybotCookiebotDialogBodyButtonAccept" }
-        ],
-        "js": "/* composed from steps */"
-      }
+      "hide": { "css": ["#CybotCookiebotDialog { display: none !important; }"] },
+      "dismiss": { "steps": [{ "action": "click", "selector": "#accept-btn" }] }
     }
   ],
   "scroll_fix": "document.body.style.overflow=''"
@@ -265,51 +246,12 @@ the above three steps fail.
 
 ## Watch Mode
 
-Inject after cleanup for pages that load overlays dynamically.
+Inject after cleanup for pages that load overlays dynamically (SPAs, lazy banners).
+See [references/watch-mode.md](references/watch-mode.md) for the full snippet.
 
-```js
-window.__pagePrep = (() => {
-  let timer = null;
-  let pending = [];
-  const MODE = 'hide'; // 'hide' | 'dismiss'
-
-  function scan() {
-    // Re-run heuristic scanner on current DOM
-    const found = window.__pagePrepScan?.() ?? [];
-    if (found.length === 0) return;
-
-    if (MODE === 'hide') {
-      found.forEach(o => {
-        const el = document.querySelector(o.selector);
-        if (el) el.style.display = 'none';
-      });
-    } else {
-      // 'dismiss' mode — queue for agent
-      found.forEach(o => {
-        if (!pending.find(p => p.id === o.id)) pending.push(o);
-      });
-    }
-  }
-
-  const observer = new MutationObserver(() => {
-    clearTimeout(timer);
-    timer = setTimeout(scan, 500);
-  });
-
-  observer.observe(document.body, { childList: true, subtree: true });
-
-  return {
-    watch: () => observer.observe(document.body, { childList: true, subtree: true }),
-    stop:  () => { observer.disconnect(); clearTimeout(timer); },
-    pending: () => [...pending],
-  };
-})();
-```
-
-- **hide mode** (default): auto-removes newly detected overlays.
-- **dismiss mode**: queues detected overlays in `window.__pagePrep.pending()`
-  for the agent to process interactively.
-- Call `window.__pagePrep.stop()` when the session is done.
+Two modes: `hide` (default) auto-removes newly detected overlays via MutationObserver;
+`dismiss` queues them in `window.__pagePrep.pending()` for agent processing.
+Call `window.__pagePrep.stop()` when the session is done.
 
 ## Tips
 
