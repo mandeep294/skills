@@ -183,31 +183,7 @@ You MUST call the Config Service API. This is the ONLY acceptable source for sit
 
 **✅ REQUIRED: Execute and save response:**
 
-```bash
-ORG=$(cat .claude-plugin/project-config.json | node -e "
-  const d = require('fs').readFileSync(0,'utf8');
-  console.log(JSON.parse(d).org || '');
-")
-
-# Save response to file - Phase 2 depends on this file
-curl -s -H "Accept: application/json" "https://admin.hlx.page/config/${ORG}/sites.json" > .claude-plugin/sites-config.json
-```
-
-**📁 REQUIRED ARTIFACT:** `.claude-plugin/sites-config.json`
-
-**API Reference:** https://www.aem.live/docs/admin.html#tag/siteConfig/operation/getConfigSites
-
----
-
-The response is a JSON object with a `sites` array (each entry has a `name` field). Extract site names and construct per-site URLs:
-- **Preview:** `https://main--{site-name}--{org}.aem.page/`
-- **Live:** `https://main--{site-name}--{org}.aem.live/`
-
-Multiple sites = **repoless** setup. Single site = **standard** setup.
-
-**Then fetch individual site config for code and content details.**
-
-First, check for valid auth token:
+First, ensure auth token is available:
 
 ```bash
 AUTH_TOKEN=$(node -e "
@@ -231,9 +207,13 @@ fi
 Skill({ skill: "project-management:auth" })
 ```
 
-Then fetch site config:
+Then fetch sites list:
 
 ```bash
+ORG=$(cat .claude-plugin/project-config.json | node -e "
+  const d = require('fs').readFileSync(0,'utf8');
+  console.log(JSON.parse(d).org || '');
+")
 AUTH_TOKEN=$(node -e "
   const fs = require('fs');
   try {
@@ -241,6 +221,26 @@ AUTH_TOKEN=$(node -e "
     process.stdout.write(t.authToken || '');
   } catch (e) {}
 ")
+
+# Save response to file - Phase 2 depends on this file
+curl -s -H "x-auth-token: ${AUTH_TOKEN}" -H "Accept: application/json" "https://admin.hlx.page/config/${ORG}/sites.json" > .claude-plugin/sites-config.json
+```
+
+**📁 REQUIRED ARTIFACT:** `.claude-plugin/sites-config.json`
+
+**API Reference:** https://www.aem.live/docs/admin.html#tag/siteConfig/operation/getConfigSites
+
+---
+
+The response is a JSON object with a `sites` array (each entry has a `name` field). Extract site names and construct per-site URLs:
+- **Preview:** `https://main--{site-name}--{org}.aem.page/`
+- **Live:** `https://main--{site-name}--{org}.aem.live/`
+
+Multiple sites = **repoless** setup. Single site = **standard** setup.
+
+**Then fetch individual site config for code and content details:**
+
+```bash
 curl -s -H "x-auth-token: ${AUTH_TOKEN}" "https://admin.hlx.page/config/${ORG}/sites/{site-name}.json"
 ```
 

@@ -259,9 +259,16 @@ ORG=$(cat .claude-plugin/project-config.json | node -e "
   const d = require('fs').readFileSync(0,'utf8');
   console.log(JSON.parse(d).org || '');
 ")
+AUTH_TOKEN=$(node -e "
+  const fs = require('fs');
+  try {
+    const t = JSON.parse(fs.readFileSync(process.env.HOME + '/.aem/ims-token.json', 'utf8'));
+    process.stdout.write(t.authToken || '');
+  } catch (e) {}
+")
 
 # Save response to file - Step 1.2 depends on this file
-curl -s -H "Accept: application/json" "https://admin.hlx.page/config/${ORG}/sites.json" > .claude-plugin/sites-config.json
+curl -s -H "x-auth-token: ${AUTH_TOKEN}" -H "Accept: application/json" "https://admin.hlx.page/config/${ORG}/sites.json" > .claude-plugin/sites-config.json
 ```
 
 **📁 REQUIRED ARTIFACT:** `.claude-plugin/sites-config.json`
@@ -324,7 +331,7 @@ cat .claude-plugin/sites-config.json
 Parse the JSON to extract site names, then fetch each site's config for code repo:
 
 ```bash
-curl -s -H "Accept: application/json" "https://admin.hlx.page/config/${ORG}/sites/{site-name}.json"
+curl -s -H "x-auth-token: ${AUTH_TOKEN}" -H "Accept: application/json" "https://admin.hlx.page/config/${ORG}/sites/{site-name}.json"
 ```
 
 Use these API responses to build context: site names, code repo (owner/repo), preview/live URLs. If site config includes a content source (e.g. content.da.live path), record it for the Sites table.

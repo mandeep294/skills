@@ -84,7 +84,7 @@ ORG=$(node -e "
   } catch(e) {}
 ")
 
-SITES_JSON=$(curl -s "https://admin.hlx.page/config/${ORG}/sites.json")
+SITES_JSON=$(curl -s -H "x-auth-token: ${AUTH_TOKEN}" "https://admin.hlx.page/config/${ORG}/sites.json")
 SITE_NAMES=$(echo "$SITES_JSON" | node -e "
   const d = require('fs').readFileSync(0,'utf8');
   const sites = JSON.parse(d).sites || [];

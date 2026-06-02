@@ -158,7 +158,7 @@ echo "auth=${AUTH_TOKEN:+set}"
 Skill({ skill: "project-management:auth" })
 ```
 
-**IMPORTANT:** Do NOT skip this step. Do NOT attempt any API calls without a valid token. Use `-H "x-auth-token: ${AUTH_TOKEN}"` cookie for all `admin.hlx.page` API calls.
+**IMPORTANT:** Do NOT skip this step. Do NOT attempt any API calls without a valid token. Use `-H "x-auth-token: ${AUTH_TOKEN}"` header for all `admin.hlx.page` API calls.
 
 ### Step 2: Load Full Configuration and Validate Role
 

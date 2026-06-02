@@ -191,7 +191,7 @@ const loginUrl = 'https://admin.hlx.page/login/' + ORG;
 
 | Field | Description | Used by |
 |-------|-------------|---------|
-| `authToken` | Token from `admin.hlx.page/login` | All `admin.hlx.page` operations (cookie auth) |
+| `authToken` | Token from `admin.hlx.page/login` | All `admin.hlx.page` operations (`x-auth-token` header) |
 | `authTokenExpiry` | Unix timestamp when authToken expires | |
 | `imsToken` | Adobe IMS OAuth token (DA only) | `admin.da.live` operations (Bearer auth) |
 | `imsTokenExpiry` | Unix timestamp when imsToken expires | |
