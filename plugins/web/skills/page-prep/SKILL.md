@@ -91,11 +91,9 @@ match) or `"heuristic"` (DOM scan).
 
 ### Step 6 — Resolve dismiss strategy per overlay
 
-- **cmp-match** (`source: "cmp-match"`): the report includes a complete `dismiss`
-  recipe with ordered steps. Use it directly.
-- **heuristic** (`source: "heuristic"`, `dismiss: null`): compose a dismiss
-  sequence yourself — try Escape key, then close buttons, then element removal
-  (see Agent Fallback).
+- **cmp-match**: the report includes a complete `dismiss` recipe. Use it directly.
+- **heuristic** (`dismiss: null`): compose a dismiss sequence — try Escape key,
+  then close buttons, then element removal (see Agent Fallback).
 
 ### Step 7 — Produce a recipe manifest
 
@@ -107,12 +105,11 @@ manifest (see Recipe Manifest Format). Include the global `scroll_fix` if
 
 **Thorough mode (default) — click-first:**
 
-1. For each overlay with a `dismiss` recipe (`source: "cmp-match"`): execute
-   the `dismiss.steps` entries sequentially using the browser tool's click/key
-   primitives. Clicking sets consent cookies that persist across all tabs in
-   the same browser session — the overlay will not reappear.
-2. For each overlay with `dismiss: null` (`source: "heuristic"`): run the
-   Agent Fallback sequence (see below).
+1. For each **cmp-match** overlay: execute `dismiss.steps` sequentially.
+   Clicking sets consent cookies that persist across all tabs — overlay
+   will not reappear.
+2. For each **heuristic** overlay (`dismiss: null`): run the Agent Fallback
+   sequence (see below).
 3. Apply `scroll_fix` if `scroll_locked` is true.
 4. If any click fails or times out after 5 seconds: fall back to the hide
    path for that overlay (batch-evaluate its `hide.js` rule).
@@ -174,11 +171,6 @@ cannot.
    2 retries.
 5. After retries exhausted: report remaining overlays to the caller but
    do not block — the page is as clean as achievable.
-
-This two-layer verification is the agent's value over the heuristic script
-alone — the script and DOM check handle the 80% of known patterns fast,
-the screenshot catches the remaining edge cases that require visual
-judgment.
 
 ### Step 10 — Optionally inject watch mode
 
