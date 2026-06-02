@@ -1,5 +1,5 @@
 ---
-name: visual-tree
+name: page-tree
 license: Apache-2.0
 compatibility: Requires playwright-cli on PATH. Run `playwright-cli --help` for usage.
 description: >-
@@ -16,7 +16,7 @@ description: >-
   page analysis, extract tree.
 ---
 
-# Visual Tree
+# page-tree
 
 Capture a spatial hierarchy of rendered DOM elements from any webpage via
 `playwright-cli`. Returns three outputs for downstream consumption.
@@ -30,10 +30,10 @@ Capture a spatial hierarchy of rendered DOM elements from any webpage via
 
 ```bash
 if [[ -n "${CLAUDE_SKILL_DIR:-}" ]]; then
-  VT_BUNDLE="${CLAUDE_SKILL_DIR}/scripts/visual-tree-bundle.js"
+  VT_BUNDLE="${CLAUDE_SKILL_DIR}/scripts/page-tree-bundle.js"
 else
   VT_BUNDLE="$(find ~/.claude \
-    -path "*/visual-tree/scripts/visual-tree-bundle.js" \
+    -path "*/page-tree/scripts/page-tree-bundle.js" \
     -type f 2>/dev/null | head -1)"
 fi
 ```

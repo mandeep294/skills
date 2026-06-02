@@ -1,5 +1,5 @@
 ---
-name: reduce-page
+name: page-reduce
 license: Apache-2.0
 compatibility: Requires playwright-cli on PATH. Run `playwright-cli --help` for usage.
 description: >-
@@ -15,7 +15,7 @@ description: >-
   reduction, structural skeleton, reduce URL.
 ---
 
-# reduce-page
+# page-reduce
 
 Reduce any webpage to a minimal structural skeleton by combining
 browser-based content tokenization (Phase 1) with LLM structural
@@ -33,7 +33,7 @@ strips utility CSS classes, and generates the final skeleton + manifest.
 ## Input
 
 ```
-/reduce-page <URL>
+/page-reduce <URL>
 ```
 
 Optional flags the user may provide:
@@ -44,10 +44,10 @@ Optional flags the user may provide:
 
 ```bash
 if [[ -n "${CLAUDE_SKILL_DIR:-}" ]]; then
-  BUNDLE="${CLAUDE_SKILL_DIR}/scripts/reduce-page-bundle.js"
+  BUNDLE="${CLAUDE_SKILL_DIR}/scripts/page-reduce-bundle.js"
 else
   BUNDLE="$(find ~/.claude \
-    -path "*/reduce-page/scripts/reduce-page-bundle.js" \
+    -path "*/page-reduce/scripts/page-reduce-bundle.js" \
     -type f 2>/dev/null | head -1)"
 fi
 ```
@@ -108,7 +108,7 @@ EOF
 echo "{\"browser\":{\"initScript\":[\"$BUNDLE\",\"$BOOTSTRAP\"]}}" > "$REDUCE_CONFIG"
 
 # Open page — initScripts run before any page JS
-URL="<target URL from /reduce-page input>"
+URL="<target URL from /page-reduce input>"
 playwright-cli open "$URL" --config="$REDUCE_CONFIG"
 sleep 3  # wait for load + async detection to complete
 
@@ -206,7 +206,7 @@ Print:
 
 ## Updating the Bundle
 
-The bundle at `scripts/reduce-page-bundle.js` is built from the
+The bundle at `scripts/page-reduce-bundle.js` is built from the
 site-transfer-blueprint-detector project (internal Adobe AEM Foundation repository).
 To update:
 
@@ -214,5 +214,5 @@ To update:
 cd <detector-repo>
 npm run build        # builds dist/detect.js
 npm run build:skill  # builds dist/reduce-for-skill.js
-cat dist/detect.js dist/reduce-for-skill.js > <skills-repo>/skills/reduce-page/scripts/reduce-page-bundle.js
+cat dist/detect.js dist/reduce-for-skill.js > <skills-repo>/skills/page-reduce/scripts/page-reduce-bundle.js
 ```

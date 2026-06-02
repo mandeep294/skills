@@ -8,8 +8,8 @@
     "cdp-ext-pilot":     { "path": "skills/cdp-ext-pilot/SKILL.md" },
     "browser-probe":     { "path": "skills/browser-probe/SKILL.md" },
     "page-prep":         { "path": "skills/page-prep/SKILL.md" },
-    "visual-tree":       { "path": "skills/visual-tree/SKILL.md" },
-    "reduce-page":       { "path": "skills/reduce-page/SKILL.md" },
+    "page-tree":         { "path": "skills/page-tree/SKILL.md" },
+    "page-reduce":       { "path": "skills/page-reduce/SKILL.md" },
     "page-collect":      { "path": "skills/page-collect/SKILL.md" },
     "domain-mask":       { "path": "skills/domain-mask/SKILL.md" }
   }

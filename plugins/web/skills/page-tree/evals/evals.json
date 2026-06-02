@@ -1,5 +1,5 @@
 {
-  "skill_name": "visual-tree",
+  "skill_name": "page-tree",
   "evals": [
     {
       "id": 1,
@@ -9,7 +9,7 @@
       "assertions": [
         {
           "type": "command_succeeds",
-          "command": "node --check scripts/visual-tree-bundle.js",
+          "command": "node --check scripts/page-tree-bundle.js",
           "description": "Visual tree bundle has valid syntax. (Browser-only IIFE — run in browser via initScript, not Node.)"
         }
       ]
