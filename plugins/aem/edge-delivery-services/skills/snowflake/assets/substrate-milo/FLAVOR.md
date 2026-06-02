@@ -186,6 +186,14 @@ editable (positional block tables). Only the global/chrome plumbing changes:
     (inspect the actual wrapper class Milo emits and match it), plus any
     `main > .section { margin: 0; }` the design needs. Scope the block's rules with
     enough specificity to win against Milo's base `main`/`.section`/typography styles.
+  - **Set `box-sizing: border-box` on any element that combines `width` with its own
+    `padding` or `border`** — full-width buttons/inputs/cards/CTAs are the common case
+    (`.fpc-btn { width: 100%; padding: 0 24px; box-sizing: border-box; }`). Without it,
+    a `width: 100%` element adds its horizontal padding *on top of* the 100%, so it
+    overflows its container (the button bleeds past the card edge). Milo does not apply
+    a global `* { box-sizing: border-box }` that reaches scoped block CSS, so declare it
+    per block — simplest is one reset at the top of the block CSS:
+    `.forge-<name> *, .forge-<name> *::before, .forge-<name> *::after { box-sizing: border-box; }`.
 - **B.5b (animation sidecars) — emit scroll animations as `animation` blocks, NOT
   bundled JS.** The Milo substrate ships a vendored `blocks/animation` runtime (+
   `tools/page-animator/controls.js`) — installed in Phase 0 — that reads a sibling
