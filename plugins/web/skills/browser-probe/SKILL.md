@@ -71,23 +71,16 @@ Load `probe-report.json`. Check `firstSuccess`:
 Load the stealth configuration reference at `references/stealth-config.md` and match the
 `detectedSignals` array against the Provider Signature Table.
 
-Key interpretation rules:
-- `cloudfront-block` or `stealth` fails but `stealth-ua` succeeds →
-  CloudFront WAF UA-based blocking (matches `HeadlessChrome` in HTTP
-  User-Agent header). Common on pharma/enterprise sites. Simple fix,
-  no TLS concerns. `stealth-ua` is the minimum working config.
-- `cloudfront` without `cloudfront-block` → CloudFront present but not
-  actively blocking. Default config may work.
-- `akamai-server` or `akamai-bot-manager` → TLS fingerprint blocking.
-  System Chrome is the fix. Stealth + UA alone is insufficient.
-- `cloudflare-ray` without `cloudflare-challenge` → Cloudflare present
-  but not actively blocking. Default config may work.
-- `cloudflare-challenge` → Active JS challenge. System Chrome + stealth
-  + UA usually resolves it.
-- `datadome` → Aggressive detection. System Chrome + stealth + UA required.
-- `aws-waf` → Usually UA-based. Stealth + UA often sufficient.
-- No signals + blocked → Unknown protection. Persistent profile is last
-  resort.
+| Signal(s) | Interpretation | Minimum config |
+|-----------|----------------|----------------|
+| `cloudfront-block` or stealth fails / stealth-ua succeeds | CloudFront UA blocking (`HeadlessChrome` in HTTP header) | `stealth-ua` |
+| `cloudfront` (no `cloudfront-block`) | CloudFront present, not blocking | default |
+| `akamai-server` / `akamai-bot-manager` | TLS fingerprint blocking | `chrome` (stealth+UA alone insufficient) |
+| `cloudflare-ray` (no `cloudflare-challenge`) | Cloudflare present, not blocking | default |
+| `cloudflare-challenge` | Active JS challenge | `chrome` + stealth + UA |
+| `datadome` | Aggressive detection | `chrome` + stealth + UA |
+| `aws-waf` | Usually UA-based | `stealth-ua` |
+| no signals + blocked | Unknown protection | `persistent` (last resort) |
 
 ### Step 4 — Generate recipe
 
@@ -148,16 +141,7 @@ with a broken configuration.
 
 ## How Consumers Use the Recipe
 
+Pass `--config=<path-to-cliConfig>` to `playwright-cli open`. If the recipe has
+`stealthInitScript`, add it to `browser.initScript` in the config (not via `eval` —
+eval is expression-only). If `"persistent": true`, also pass `--persistent`.
 Run `playwright-cli --help` for the full command reference.
-
-Any script using `playwright-cli` can consume `browser-recipe.json`:
-
-1. Write `cliConfig` to a temp file (e.g., `/tmp/probe-cli-config.json`)
-2. If recipe has `stealthInitScript`, write it to a temp file and add
-   it to the config's `browser.initScript` array (do NOT use
-   `playwright-cli eval` — eval only accepts pure expressions, not
-   multi-statement scripts)
-3. Pass `--config=/tmp/probe-cli-config.json` to `playwright-cli open`
-4. Proceed with normal `goto <url>` and workflow
-
-If recipe has `"persistent": true`, also pass `--persistent` to `open`.
