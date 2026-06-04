@@ -134,7 +134,14 @@ In quick mode, stop here. In thorough mode, continue to Step 9b.
 
 #### Step 9b — Viewport screenshot verification (thorough mode only)
 
-1. Take a **viewport screenshot** (not fullpage) via `playwright-cli screenshot --filename=/tmp/page-prep-check.png`.
+1. Take a **viewport screenshot** (not fullpage):
+   ```bash
+   playwright-cli -s <session> screenshot --filename .playwright-cli/page-prep-check.png
+   ```
+   Then use the Read tool on `.playwright-cli/page-prep-check.png` to view it.
+   Note: `--filename` must be a path within the project root or `.playwright-cli/` —
+   `/tmp/` paths are not allowed. Do not pass the path as a positional argument;
+   that is interpreted as a CSS selector, not a file path.
 2. Visually analyze the screenshot: are there visible overlays, banners,
    modals, or backdrop dimming still present?
 3. If the page is clean: verification complete.
