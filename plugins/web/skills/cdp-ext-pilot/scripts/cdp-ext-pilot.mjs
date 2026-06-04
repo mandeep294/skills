@@ -448,15 +448,15 @@ async function openSidepanel(session) {
 
   // Connect to page target to find content script context
   const { ws, send } = await connectToTarget(page.webSocketDebuggerUrl);
+  let noContentScript = false;
   try {
     // Find extension content script context
     const extCtxId = await new Promise((res, rej) => {
       const timer = setTimeout(() => {
         ws.removeEventListener('message', handler);
-        rej(new Error(
-          'No content script context found. The extension may not inject content ' +
-          'scripts on this page, or the URL may not match its content_scripts.matches pattern.'
-        ));
+        const err = new Error('No content script context found.');
+        err.code = 'NO_CONTENT_SCRIPT';
+        rej(err);
       }, 5000);
       const handler = (e) => {
         const msg = JSON.parse(e.data);
@@ -481,8 +481,28 @@ async function openSidepanel(session) {
       returnByValue: true,
       userGesture: true,
     });
+  } catch (err) {
+    if (err.code !== 'NO_CONTENT_SCRIPT') throw err;
+    noContentScript = true;
   } finally {
     ws.close();
+  }
+
+  if (noContentScript) {
+    // chrome.sidePanel.open() requires a user gesture and cannot be triggered via CDP.
+    // Extensions without content scripts have no injection point for the gesture workaround.
+    // Fall back to opening the sidepanel URL as a tab — same as popup/options handling.
+    console.error(
+      'No content script context found — falling back to tab mode.\n' +
+      'Note: the sidepanel runs as a tab (page context), not a true sidepanel context.\n' +
+      'chrome.sidePanel.open() requires a user gesture and cannot be triggered via CDP.\n' +
+      'To open a real sidepanel: add a content_scripts entry that matches the target page\n' +
+      'and handle the {type:"open_side_panel"} message in the service worker.'
+    );
+    const url = `chrome-extension://${session.extensionId}/${sidepanelPath}`;
+    const result = await cdpBrowser(session.port, 'Target.createTarget', { url });
+    console.log(JSON.stringify({ targetId: result.targetId, url, context: 'tab' }));
+    return;
   }
 
   // Poll for sidepanel target
