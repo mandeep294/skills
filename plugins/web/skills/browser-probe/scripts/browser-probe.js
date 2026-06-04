@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
+import { mkdirSync, writeFileSync, unlinkSync, realpathSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -327,9 +327,16 @@ function main() {
   log(`Wrote ${reportPath}`);
 }
 
-// Only run main when executed directly (not imported by tests)
-const isMain = process.argv[1]
-  && resolve(process.argv[1]) === resolve(
-    new URL(import.meta.url).pathname,
-  );
+// Only run main when executed directly (not imported by tests).
+// realpathSync resolves symlinks so .claude/skills/ directory symlinks work.
+// Falls back to true if import.meta.url is unavailable (non-standard runtimes).
+let isMain = false;
+try {
+  isMain = Boolean(process.argv[1])
+    && realpathSync(resolve(process.argv[1])) === resolve(
+      new URL(import.meta.url).pathname,
+    );
+} catch {
+  isMain = true;
+}
 if (isMain) main();
