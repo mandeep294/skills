@@ -266,7 +266,10 @@ async function main() {
   const { cliConfig, stealthScript } = loadBrowserRecipe(browserRecipe);
   const scriptDir = dirname(require.resolve('./page-collect.js'));
   const bundlePath = join(scriptDir, 'page-collect-bundle.js');
-  const tmpPrefix = join(tmpdir(), `page-collect-${process.pid}`);
+  // playwright-cli restricts file access to the project root and .playwright-cli/.
+  // /tmp/ is blocked for both run-code --filename and screenshot --filename.
+  // Write temp files inside the output directory instead.
+  const tmpPrefix = join(output, `.tmp-${process.pid}`);
 
   // Build playwright-cli --config JSON
   const config = buildCliConfig(cliConfig, bundlePath, stealthScript, tmpPrefix);
