@@ -17,25 +17,20 @@ license: Apache-2.0
 - A `*.java` file whose class is annotated `@Model`, with at least one **field** annotated `@Inject`.
 - Constructor-parameter and setter-method `@Inject` are out of scope (trigger the file-level skip).
 
-## Discovery (standalone)
+## Discovery
 
-Self-discoverable. Search **workspace roots only** — never parent dirs, `~`, or other clones.
+Detection is performed by the analyzer ([`../scripts/analyze.sh`](../scripts/README.md)), run by
+the runbook:
 
 ```bash
-rg -l '@Model' --glob '*.java' <workspace-root>   # or: grep -rl '@Model' --include='*.java' <workspace-root>
+bash ../scripts/analyze.sh <workspace-root> --pattern inject-in-sling-model
 ```
 
-Then keep only files that also have a field-level `@Inject`. Antipattern example:
-
-```java
-@Model(adaptables = Resource.class)
-public class Example {
-    @Inject
-    private String title;
-}
-```
-
-Exclude files that only use `@Inject` on constructors/setters or lack `@Model`. For each candidate, if a quick read shows constructor/setter `@Inject` or an unsupported companion annotation, pre-record a `discovery_warnings[]` note and pre-classify it as a skip in the report.
+**Match criteria (what the detector flags):** a class annotated `@Model`
+(`org.apache.sling.models.annotations.Model`, confirmed import-aware) with at least one **field**
+annotated `@Inject` (`javax.inject.Inject` or `jakarta.inject.Inject`). One finding per matching
+field. Constructor/setter `@Inject` and non-`@Model` classes are not flagged. The replacement
+annotation is chosen from the field's declared type by the decision table in `recipe.md`.
 
 ## Resolution contract
 

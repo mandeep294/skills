@@ -12,20 +12,50 @@ license: Apache-2.0
 
 Stale Maven dependencies (notably `aem-sdk-api`) cause build failures and local/runtime drift. This skill bumps a dependency's version surgically — literal `<version>` or a same-pom `${property}` — without reformatting the pom.
 
+## Answering "are my dependencies up to date?"
+
+This pattern **locates** Maven coordinates; it does **not** declare a dependency outdated vs current without a **user-supplied target version** (see Resolution contract). For a comparative ask ("up to date?", "stale?", "outdated?") with `report` intent:
+
+1. Run discovery via the analyzer (`--pattern outdated-dependencies`, or a full audit).
+2. Present every located coordinate in the Step 7 **Candidates** table with planned action `skipped` and reason `needs-user-target` (no target supplied).
+3. State plainly: *"Found N versioned dependencies across M pom files. Supply target versions to mark upgrades. For `aem-sdk-api`, align with your Cloud Manager environment SDK — do not assume the latest public version."*
+4. Offer follow-up: reply with target versions to apply, or name coordinates then say **apply**.
+
+**Do not** run `mvn versions:display-*`, `npm outdated`, or Maven Central / registry lookups in place of this inventory. A live registry comparison needs network and is advisory only — if the user explicitly asks, do it as a separate step **after** the skill report.
+
 ## Classification — confirm this pattern applies
 
 - A `pom.xml` with a `<dependency>` whose version the user wants raised, either as a literal `<version>` or via a `<version>${prop}</version>` + `<properties>` entry.
-- Not for `<plugin>` versions, `<dependencyManagement>` / BOM overrides, or parent-pom inheritance (not currently supported).
+- Applies to a `<dependency>` that carries a `<version>` (literal or `${property}`) in `<dependencies>` **or** `<dependencyManagement>`. Not for `<plugin>` / `<build>` dependencies, version-less (inherited) `<dependency>` entries, or versions defined only in an out-of-workspace parent pom.
 
-## Discovery (standalone)
+## Discovery
 
-**Partial.** The skill can enumerate `<dependency>` blocks under workspace roots, but "is this outdated?" and "what is the target?" require the user to say — see Resolution contract.
+Detection is performed by the analyzer ([`../scripts/analyze.sh`](../scripts/README.md)), run by
+the runbook:
 
 ```bash
-rg -l '<dependency>' --glob 'pom.xml' <workspace-root>   # or: grep -rl '<dependency>' --include='pom.xml' <workspace-root>
+bash ../scripts/analyze.sh <workspace-root> --pattern outdated-dependencies
 ```
 
-Discover-time check: for each candidate `(groupId, artifactId, currentVersion)`, count matching `<dependency>` blocks in the file; if > 1, record `discovery_warnings[]` and pre-skip with `ambiguous-locator`. Do **not** invent target versions.
+**Match criteria (what the detector flags):** each `<dependency>` element carrying a `<version>`
+(literal or `${property}`) under `<dependencies>` or `<dependencyManagement>` — excluding
+`<plugin>`/`<pluginManagement>`/`<build>`/`<reporting>` dependencies and version-less (inherited)
+`<dependency>` entries — emitted with its `groupId:artifactId@version` and the line of its
+`<artifactId>`. The analyzer only **locates** dependencies — "is this outdated?" and "what is the
+target version?" are **user-supplied** (see Resolution contract); the analyzer performs no network
+lookup. If the same `(groupId, artifactId, version)` appears in more than one `<dependency>` block
+in a file, the recipe's `ambiguous-locator` skip applies during planning.
+
+**Allowlist scope:** by default the detector is scoped to a curated allowlist of coordinates where
+upgrades are actionable in AEM Cloud Service projects (currently `com.adobe.aem:aem-sdk-api` and
+`org.mockito:*`). Non-allowlisted versioned dependencies are silently skipped. To list every
+versioned dependency regardless of allowlist, pass `--all` to `analyze.sh` — but **only** for an
+explicit full audit ("all dependencies", "every library", "comprehensive"). For a normal "are my
+dependencies outdated?" ask, keep the default allowlist scope: it is the actionable answer, and
+`--all` adds platform deps (OSGi, JCR, servlet-api) that are not independently upgradeable. Adding a coordinate to
+the allowlist is a one-line change in `OutdatedDependencies.java`; `analyze.sh` recompiles
+automatically. Both exact `groupId:artifactId` and prefix-wildcard `groupId:prefix*` forms are
+supported.
 
 ## Resolution contract
 

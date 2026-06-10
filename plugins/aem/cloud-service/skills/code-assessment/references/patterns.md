@@ -14,10 +14,11 @@ Adding a pattern: add a row here, then build the expert skill from
 - **description** — one line.
 - **severity** — `high` | `medium` | `low`. The report orders findings by this (highest first).
 - **status** — `ready` (expert skill built) | `planned` (catalogued placeholder, not built yet).
-- **detection** — how instances are found: `scan` (the agent searches the workspace) or
-  `analyzer` (a deterministic local detector — reserved, see [`../scripts/README.md`](../scripts/README.md);
-  not yet built). When the user names targets directly, that's the `with_findings` invocation
-  mode (see [`../SKILL.md`](../SKILL.md)), not a per-pattern detection method.
+- **detection** — how instances are found: `analyzer` (the deterministic local analyzer
+  parses the workspace and emits findings — see [`../scripts/README.md`](../scripts/README.md))
+  or `scan` (legacy LLM workspace search, used only where no analyzer detector exists yet).
+  When the user names targets directly, that's the `with_findings` invocation mode
+  (see [`../SKILL.md`](../SKILL.md)), not a per-pattern detection method.
 - **fix** — `mechanical` (deterministic edit) | `guided` (LLM-judgment remediation).
   Set only when a pattern reaches `ready` and has a recipe to prove it; `planned` rows
   leave it `-` (the fix approach is decided when the pattern is built).
@@ -28,8 +29,8 @@ Adding a pattern: add a row here, then build the expert skill from
 
 | pattern | description | severity | status | detection | fix |
 |---|---|---|---|---|---|
-| [`inject-in-sling-model`](../inject-in-sling-model/SKILL.md) | migrate `@Inject` fields in `@Model` classes to injector-specific annotations | high | ready | scan | mechanical |
-| [`outdated-dependencies`](../outdated-dependencies/SKILL.md) | upgrade stale Maven dependency versions | medium | ready | scan | mechanical |
+| [`inject-in-sling-model`](../inject-in-sling-model/SKILL.md) | migrate `@Inject` fields in `@Model` classes to injector-specific annotations | high | ready | analyzer | mechanical |
+| [`outdated-dependencies`](../outdated-dependencies/SKILL.md) | upgrade stale Maven dependency versions | medium | ready | analyzer | mechanical |
 | `outbound-call-timeouts` | add connect/read timeouts to outbound HTTP / `URLConnection` calls | high | planned | scan | - |
 | `unbounded-query` | bound QueryBuilder / JCR / SQL2 queries (`p.limit=-1` → limit + pagination) | high | planned | scan | - |
 | `unclosed-resources` | close `ResourceResolver` / `Session` / streams via try-with-resources | high | planned | scan | - |

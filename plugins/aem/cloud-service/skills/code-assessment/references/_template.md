@@ -23,7 +23,7 @@ license: Apache-2.0
 - **Overview** — what the antipattern is and why it matters (2–4 lines).
 - **Classification** — how to confirm a request maps to this pattern; path selection if the
   pattern has variants.
-- **Discovery (standalone)** — how to self-detect: `rg` / `grep` / glob patterns, scope (workspace
+- **Discovery** — how to self-detect: `rg` / `grep` / glob patterns, scope (workspace
   roots only), exclusions. If the pattern is NOT self-discoverable, say so explicitly and state
   what input it requires.
 - **Resolution contract** — where fix parameters come from. One of:

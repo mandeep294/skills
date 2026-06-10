@@ -10,7 +10,7 @@ The recipe expects the following fields, per outdated-dependency finding, regard
 |---|---|---|
 | `file` | `core/pom.xml` | Repo-relative path to the pom.xml |
 | `groupId` / `artifactId` | `org.mockito` / `mockito-core` | Maven coordinates of the dependency |
-| `currentVersion` | `4.4.0` | Value present in the customer's file |
+| `currentVersion` | `4.4.0` | Value present in the developer's file |
 | `targetVersion` | `5.14.0` | Value to upgrade to — **user-supplied** |
 | `shape` | `literal` or `property` | Detected locally by reading the pom (see Pattern A vs B below) |
 | `propertyName` | `mockito.version` | Detected locally; only meaningful when `shape=property` |
@@ -143,7 +143,7 @@ Some AEM projects reference the same property in multiple child poms via parent 
 
 ## Editing strategy
 
-Use a text-level surgical replace, not a generic XML re-serializer, to preserve the customer's exact formatting (indentation, comments, attribute order). Anchor the replace on the full locator match so unrelated identical values (e.g. a comment containing `4.4.0`) are not touched.
+Use a text-level surgical replace, not a generic XML re-serializer, to preserve the developer's exact formatting (indentation, comments, attribute order). Anchor the replace on the full locator match so unrelated identical values (e.g. a comment containing `4.4.0`) are not touched.
 
 Concretely:
 1. Read the file.

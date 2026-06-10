@@ -43,7 +43,7 @@ Run in order. **Hard stops** are limited to: unsupported pattern, user declined 
 
 **Per-pattern fault isolation:** if detecting or fixing one pattern fails unexpectedly, isolate it — record the failure (a `skipped` entry with the reason) and continue with the remaining patterns; the report lists it. One pattern's failure never aborts the whole run.
 
-Do not edit customer code until the active expert skill's `SKILL.md` and recipe have been read in full.
+Do not edit the developer's code until the active expert skill's `SKILL.md` and recipe have been read in full.
 
 ### 1. Classify
 
@@ -58,8 +58,26 @@ Read the chosen expert skill's `SKILL.md` then its `recipe.md` (or `path-*.md`) 
 **Findings shape (the detection↔remediation interface).** However found, each finding carries: `pattern` (slug), `file` (workspace-relative path), `line` (1-indexed), `snippet` (the offending text). Every source — an LLM `scan`, user-named targets, or a future deterministic `analyzer` — emits this shape, and everything downstream (plan, apply, verify, report) consumes it identically.
 
 **with_findings:** Build the work list from user-named paths/coordinates. For outdated dependencies, merge user-supplied fields with local pom inspection for `shape` / `propertyName`. For Sling Model inject migration, use the resolved Java paths only.
+Pass the named paths to the analyzer with `--files a.java,b.java` so detection runs only on them.
 
-**discover:** Follow the expert skill's **Discovery** section — search only under IDE workspace root(s). Do not walk parent dirs, `~`, or other clones. Cap scope: prefer `**/pom.xml` for deps, `**/*.java` under typical AEM module paths (`core/`, `bundle/`, etc.) for `@Inject`. Every candidate must match antipattern examples in the expert skill.
+**discover:** Run the analyzer — it is the detection engine:
+
+```bash
+bash <skill-dir>/scripts/analyze.sh <workspace-root> [--pattern <slug>]
+```
+
+Pass `--pattern <slug>` for a single expert-skill run; omit it for a full multi-pattern audit.
+Parse its stdout JSON: `findings[]` (each already in the `{pattern,file,line,snippet}` shape
+below) is the work list; surface `warnings[]` under **Discover warnings** in the report. Do not
+re-scan per pattern — the analyzer parses the workspace once and runs all enabled detectors over
+that single parse. See [`../scripts/README.md`](../scripts/README.md).
+
+**Dependency scope (`--all`):** `outdated-dependencies` defaults to a curated allowlist of
+coordinates where upgrades are actionable in AEM CS (`aem-sdk-api`, `org.mockito:*`). Pass `--all`
+**only** for an explicit full audit — the user says "all dependencies", "every library", or
+"comprehensive". Do **not** pass `--all` for a normal "are my dependencies outdated?" ask: the
+allowlist is the actionable answer, and `--all` floods the report with platform deps (OSGi, JCR,
+servlet-api) that are not independently upgradeable.
 
 **Discover-time checks (run during Step 3, before Step 6):** Do not wait until plan/skip to surface predictable failures.
 
@@ -81,6 +99,9 @@ discover-warning: core/pom.xml — org.mockito:mockito-core@4.4.0 appears in 2 <
 
 Detect `edit_mode` (`git rev-parse --is-inside-work-tree` → `git` | `in_place`) and take the advisory git snapshot **here** — this runbook is the sole owner of repo-environment detection; the entry/router (`../SKILL.md`) does not duplicate it. Run `git status --porcelain` and `git rev-parse --abbrev-ref HEAD`. Record in the run log as `preflight.git_status: clean | dirty` and `preflight.branch`.
 
+- **JDK check (detection requirement):** run `java -version`. The analyzer needs a JDK
+  (Java 11+). If absent, **stop** with: *"Detection requires a local JDK (Java 11+). Install a
+  JDK or point `JAVA_HOME` at one, then re-run."* (Analyzer-only; no LLM-scan fallback.)
 - **Dirty tree (untracked or modified files):** do **not** stop. Warn in the plan: mixed WIP and autofix edits may be harder to review; `git restore` rollback only reverts paths this skill touched.
 - **Already on `autofix/*`:** stop unless the user explicitly wants to continue on that branch — avoids nested/confusing runs.
 - **Not on team base branch:** warn only; proceed if user intent is apply.
@@ -146,7 +167,7 @@ Copy this structure; keep section headings so runs are comparable across session
 ## Summary counts
 - Apply: <n>
 - Skipped: <n>
-- Needs user target version: <n> (deps only)
+- — of which needs user target version: <n> (subset of Skipped; deps only)
 - Deferred (no-recipe / not-selected): <n>
 
 ## Deferred (no-recipe / not-selected)
@@ -156,6 +177,10 @@ Copy this structure; keep section headings so runs are comparable across session
 <For report intent: "Reply **apply** to make edits, or name files/versions to narrow scope.">
 <For apply intent: awaiting user confirmation — do not edit until yes>
 ```
+
+**Agent output requirement:** present the full report template above in the user-facing response — every section, headings verbatim. Do not replace it with a shortened or ad-hoc summary; identical headings keep runs comparable across sessions.
+
+**Counts come from the analyzer JSON `findings[]` and the per-item plan — never estimated.** Each finding has exactly one disposition: **apply-candidate** or **skipped**. The invariant is `apply + skipped == total findings`. The skipped *reasons* (`needs-target`, `ambiguous-locator`, `unlocatable`) **partition** the skipped set — they sum to `skipped`, they are not added on top of it. Pattern-level deferral (`not-selected`, from one-pattern-per-session) is recorded separately in `deferred[]` for the apply phase; it is **not** a per-finding skip and must not be added to the skipped count. In `report` intent, "apply-candidate" means a finding that *would* be applied — no edits are made.
 
 **Runtime caveat** (include when `@Inject` migration is in scope): compile does not exercise Sling Model adaptation — deploy to dev before merge.
 
@@ -177,5 +202,5 @@ Re-run `mvn compile` when Step 5 was not skipped. Record `compile.verification: 
 
 ## Workspace scope
 
-- Customer Java/XML/HTL: **only** under current IDE workspace root(s).
+- Developer Java/XML/HTL: **only** under current IDE workspace root(s).
 - Skill files under `code-assessment/`: read for instructions, never edit.

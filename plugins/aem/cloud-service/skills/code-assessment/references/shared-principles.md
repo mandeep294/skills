@@ -12,7 +12,7 @@ baseline `mvn compile` is recorded and surfaced, not treated as a stop. The only
 safety issues: a verification failure after edits (triggers rollback) and an existing `autofix/*`
 branch without user consent.
 
-**Why:** customers routinely have WIP changes or an already-broken HEAD and still want a findings
+**Why:** developers routinely have WIP changes or an already-broken HEAD and still want a findings
 report or a targeted fix. A run that exits before producing anything useful helps no one. Prefer
 **warn + report + ask** over **stop + fix-your-environment-first**.
 
@@ -26,16 +26,18 @@ expert skill's Discovery section owns detection; its recipe owns remediation.
 *detection method* can be upgraded without rewriting the fix. A recipe must never assume how its
 findings were produced.
 
-## Determinism-preferred detection
+## Determinism-first detection
 
-LLM `scan` is the zero-setup default and the universal fallback — no toolchain, works anywhere. But
-where a pattern is high-volume or precision-sensitive (LLM scanning would be slow, token-heavy, or
-miss/over-flag), a **deterministic detector is the preferred end-state**.
+Detection runs through the **analyzer** ([`../scripts/analyze.sh`](../scripts/README.md)): it
+parses the workspace once and runs the enabled detectors over that single parse, emitting findings
+in the shared shape. This is deterministic and reproducible, and it scales — the expensive
+read/parse is paid once per file, not once per pattern.
 
-**Why:** deterministic detection is reproducible and scales; LLM scanning does not. So detection
-method is a **per-pattern choice** in the catalog (`scan` | `analyzer`), not a global stance. The
-`analyzer` value and [`../scripts/`](../scripts/README.md) are reserved for that future; because
-detection and remediation are separable, the upgrade touches neither the recipe nor the runbook.
+**Why:** re-scanning the source per pattern does not scale as the catalog grows; a single parse
+plus cheap per-detector matching does. Detection is therefore a deterministic, local,
+zero-network step. Because detection and remediation are separable, a new detector slots into the
+analyzer without touching any recipe or the runbook. Patterns without an analyzer detector yet
+fall back to an LLM `scan` (catalog `detection: scan`) until one is built.
 
 ## One pattern per session
 
@@ -56,7 +58,7 @@ Edit **only** what the source named: the user's paths/coordinates, or what the r
 actually matched. Never opportunistically clean up nearby code.
 
 **Why:** scope discipline is what makes the skill trustworthy. The moment it edits outside its stated
-input, the customer can no longer review the diff without auditing the whole project.
+input, the developer can no longer review the diff without auditing the whole project.
 
 ---
 

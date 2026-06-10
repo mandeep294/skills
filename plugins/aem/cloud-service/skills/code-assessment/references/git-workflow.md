@@ -44,7 +44,7 @@ The skill writes the modified source files (e.g. `pom.xml`, `.java`) on the fix 
 - Open a PR.
 - Amend or force-push anything.
 
-The run's log file (`.autofix/last-run.json`) is written to the working-directory root. On first use the skill also writes `.autofix/.gitignore` containing `*`, so the directory self-ignores and the run log never lands in the customer's commits.
+The run's log file (`.autofix/last-run.json`) is written to the working-directory root. On first use the skill also writes `.autofix/.gitignore` containing `*`, so the directory self-ignores and the run log never lands in the developer's commits.
 
 ## Rollback
 
@@ -62,13 +62,13 @@ git branch -D autofix/<pattern-slug>/<date>-<hash>
 
 The `.autofix/last-run.json` record persists (gitignored) so the user can inspect what happened.
 
-## Handing back to the customer
+## Handing back to the developer
 
 After a successful run, the skill tells the user:
 
 > "Edits applied on branch `<branch-name>`. Review with `git diff <base-branch>...HEAD`. If the diff looks right, stage and commit the files yourself, then open a PR from your git host — the skill does not commit, push, or open PRs automatically."
 
-Suggested commit message (for the customer to use, not the skill):
+Suggested commit message (for the developer to use, not the skill):
 
 ```
 autofix: <pattern-slug> — <summary line per the expert skill>
@@ -82,11 +82,11 @@ Skipped (unlocatable / ambiguous targets):
 
 The `Skipped (…)` trailer is included only if the run had skips.
 
-Each expert skill under `code-assessment/<pattern>/` documents its own suggested subject line and per-edit detail format. The customer is free to adjust the message.
+Each expert skill under `code-assessment/<pattern>/` documents its own suggested subject line and per-edit detail format. The developer is free to adjust the message.
 
 ## Run log: `.autofix/last-run.json`
 
-The skill writes a single JSON record to `.autofix/last-run.json` at the working-directory root after each run (success, revert, report, or abort). On first use it also writes `.autofix/.gitignore` containing `*`, so the directory self-ignores in the customer's repo (the skill cannot edit the customer's root `.gitignore`). The file is the authoritative record of what the skill did or attempted. It is overwritten on every run — historical runs are not retained.
+The skill writes a single JSON record to `.autofix/last-run.json` at the working-directory root after each run (success, revert, report, or abort). On first use it also writes `.autofix/.gitignore` containing `*`, so the directory self-ignores in the developer's repo (the skill cannot edit the developer's root `.gitignore`). The file is the authoritative record of what the skill did or attempted. It is overwritten on every run — historical runs are not retained.
 
 ### Schema
 
@@ -176,6 +176,6 @@ The skill writes a single JSON record to `.autofix/last-run.json` at the working
 
 ## Why this overall shape
 
-- **Branch, no commit** — the branch isolates the experiment from the customer's main branch. The absence of a commit preserves the human checkpoint that catches wrong transformations. An autofix that commits without review can silently merge a broken rewrite.
-- **No push, no PR** — remote state is entirely customer-owned. The skill never touches it.
-- **Explicit `.autofix/last-run.json` log** (self-ignored via `.autofix/.gitignore`) — makes a failed or partial run recoverable and auditable without inferring state from git, and never pollutes the customer's commits.
+- **Branch, no commit** — the branch isolates the experiment from the developer's main branch. The absence of a commit preserves the human checkpoint that catches wrong transformations. An autofix that commits without review can silently merge a broken rewrite.
+- **No push, no PR** — remote state is entirely developer-owned. The skill never touches it.
+- **Explicit `.autofix/last-run.json` log** (self-ignored via `.autofix/.gitignore`) — makes a failed or partial run recoverable and auditable without inferring state from git, and never pollutes the developer's commits.

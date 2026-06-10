@@ -184,12 +184,12 @@ What changed, in order:
 - `@Named("cta-label")` was merged into `@ValueMapValue(name = "cta-label")`.
 - `title` (`String`) → `@ValueMapValue`.
 - `subtitle` (`String`, was `@Optional`) → `@ValueMapValue(injectionStrategy = InjectionStrategy.OPTIONAL)` — optional preserved on this field only.
-- `contentService` (interface from customer package `com.example.core.services`) → `@OSGiService`.
+- `contentService` (interface from an application package `com.example.core.services`) → `@OSGiService`.
 - `resource` (`org.apache.sling.api.resource.Resource`) → `@SlingObject` — resolves for both request- and resource-adapted models (`@Self` would return `null` here).
 
 ## Editing strategy
 
-Use a surgical text-level replace, not a source reformatter, to preserve the customer's exact formatting, comments, and import order.
+Use a surgical text-level replace, not a source reformatter, to preserve the developer's exact formatting, comments, and import order.
 
 Concretely, per field site:
 
@@ -203,4 +203,4 @@ Then, once all field sites in the file are rewritten:
 5. Do **not** modify the class-level `@Model(...)` for `@Optional`; the optional field carries `injectionStrategy = InjectionStrategy.OPTIONAL` on its own annotation instead.
 6. Update the imports block: remove unused imports from the "Remove" list; add required imports from the "Add" list, alphabetized within the existing grouping convention.
 
-If at any point the transform for a field does not cleanly fit (e.g. the annotation block contains an unexpected companion, or the field declaration spans multiple lines in a way the parser does not recognize), trigger skip-file for the whole file — per policy.
+If at any point the transform for a field does not cleanly fit (e.g. the annotation block contains an unexpected companion, or the annotation/field block does not match the form described above — single-line annotations on consecutive lines ending at the field declaration), trigger skip-file for the whole file — per policy.
