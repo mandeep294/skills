@@ -1,14 +1,15 @@
 # scripts/ — deterministic detection analyzer
 
-`analyze.sh` is the compile-cache wrapper for the code-assessment **detection engine**: it compiles
-the `analyzer/` Java package to a hashed temp cache on first run, reuses the cache on subsequent
-runs, and emits findings as JSON. Requires a **JDK** (`javac` + `java`, Java 11+) — a JRE alone
-cannot run it.
+`Bootstrap.java` is the compile-cache entry point for the code-assessment **detection engine**: run
+directly with the JDK single-file source launcher (no pre-compile, no shell), it compiles the
+`analyzer/` Java package to a hashed temp cache on first run, reuses the cache on subsequent runs,
+and emits findings as JSON. Requires a **JDK** (Java 11+) — the analyzer parses the workspace with
+the system Java compiler, so a JRE alone cannot run it.
 
 ## Run
 
 ```
-bash analyze.sh <workspace-root> [--pattern <slug>] [--files a.java,b.java] [--all]
+java <path>/Bootstrap.java <workspace-root> [--pattern <slug>] [--files a.java,b.java] [--all]
 ```
 
 - `<workspace-root>` — directory to scan (skips `target/`, `build/`, `dist/`, `node_modules/`, `.git/`, `.autofix/`).
@@ -16,7 +17,7 @@ bash analyze.sh <workspace-root> [--pattern <slug>] [--files a.java,b.java] [--a
 - `--files <list>` — restrict the corpus to an explicit comma-separated file list (the `with_findings` invocation).
 - `--all` — disable detector allowlists; list every versioned dependency rather than only the curated set. By default `outdated-dependencies` is scoped to an allowlist (`aem-sdk-api`, `org.mockito:*`); `--all` surfaces all versioned deps for a full audit.
 
-On first run, `analyze.sh` compiles `analyzer/` to a temp cache (`$TMPDIR/aem-code-assessment/<hash>/`). Subsequent runs reuse the cache when no source files have changed. Nothing is written to the project tree — the compile cache lives in system temp.
+On first run, `Bootstrap.java` compiles `analyzer/` to a temp cache (`<java.io.tmpdir>/aem-code-assessment/<hash>/`) using the in-process system Java compiler, then loads and runs it. Subsequent runs reuse the cache when no source files have changed. Nothing is written to the project tree — the compile cache lives in system temp.
 
 ## Output
 
@@ -48,10 +49,11 @@ self-ignored `.autofix/` dump — nothing git-tracked is touched.
 | 3 | No JDK (system Java compiler not found) |
 | 4 | Unknown `--pattern` slug |
 | 5 | Analyzer failed to compile |
+| 6 | Cannot locate `analyzer/` sources next to `Bootstrap.java` |
 
 ## How it works
 
-1. **Acquire once:** sources live in `analyzer/` (package `analyzer`), compiled once by `analyze.sh`
+1. **Acquire once:** sources live in `analyzer/` (package `analyzer`), compiled once by `Bootstrap.java`
    into a hashed temp cache. Each `*.java` is parsed into a `JavaUnit`, each `pom.xml` into a
    `PomUnit`, and together they form a shared `Corpus`.
 2. **Match many:** each registered `Detector` walks the shared `Corpus` for its own signature.

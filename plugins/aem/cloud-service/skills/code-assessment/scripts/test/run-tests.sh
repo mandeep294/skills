@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Dependency-free harness for the code-assessment analyzer (run via analyze.sh). Runs the analyzer against fixtures
-# and asserts on the JSON it prints to stdout. Requires only a JDK and bash.
+# Dependency-free harness for the code-assessment analyzer (run via Bootstrap.java). Runs the analyzer against
+# fixtures and asserts on the JSON it prints to stdout. Requires only a JDK and bash.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
-ANALYZE="$HERE/../analyze.sh"
+BOOT="$HERE/../Bootstrap.java"
 FIX="$HERE/fixtures"
 PASS=0; FAIL=0
 
-run() { bash "$ANALYZE" "$@" 2>/dev/null; }
+run() { java "$BOOT" "$@" 2>/dev/null; }
 
 assert_contains() { # desc, haystack, needle
   if printf '%s' "$2" | grep -q -- "$3"; then
@@ -85,7 +85,7 @@ assert_absent  "reactor-module (\${project.version}) skipped"  "$OUT" 'reactor-m
 echo "[wiring] each registered detector has an expert skill + ready/analyzer catalog row"
 SKILL_ROOT="$(cd "$HERE/../.." && pwd)"
 PATTERNS_MD="$SKILL_ROOT/references/patterns.md"
-for slug in $(bash "$ANALYZE" --list-patterns); do
+for slug in $(java "$BOOT" --list-patterns); do
   if [ -f "$SKILL_ROOT/$slug/SKILL.md" ]; then
     echo "  PASS: $slug has expert skill dir"; PASS=$((PASS+1))
   else
@@ -129,7 +129,7 @@ assert_contains "split dep still located"   "$OUT" 'split-artifact'
 assert_contains "line-unresolved warning"   "$OUT" 'line-unresolved'
 
 echo "[unknown-exit] unknown --pattern exits non-zero"
-bash "$ANALYZE" "$FIX/mixed" --pattern does-not-exist >/dev/null 2>&1; rc=$?
+java "$BOOT" "$FIX/mixed" --pattern does-not-exist >/dev/null 2>&1; rc=$?
 if [ "$rc" -ne 0 ]; then echo "  PASS: unknown --pattern non-zero exit ($rc)"; PASS=$((PASS+1));
 else echo "  FAIL: unknown --pattern exited 0"; FAIL=$((FAIL+1)); fi
 

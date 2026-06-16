@@ -28,7 +28,7 @@ findings were produced.
 
 ## Determinism-first detection
 
-Detection runs through the **analyzer** ([`../scripts/analyze.sh`](../scripts/README.md)): it
+Detection runs through the **analyzer** ([`../scripts/Bootstrap.java`](../scripts/README.md)): it
 parses the workspace once and runs the enabled detectors over that single parse, emitting findings
 in the shared shape. This is deterministic and reproducible, and it scales — the expensive
 read/parse is paid once per file, not once per pattern.

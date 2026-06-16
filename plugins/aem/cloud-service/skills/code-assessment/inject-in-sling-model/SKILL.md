@@ -19,11 +19,11 @@ license: Apache-2.0
 
 ## Discovery
 
-Detection is performed by the analyzer ([`../scripts/analyze.sh`](../scripts/README.md)), run by
+Detection is performed by the analyzer ([`../scripts/Bootstrap.java`](../scripts/README.md)), run by
 the runbook:
 
 ```bash
-bash ../scripts/analyze.sh <workspace-root> --pattern inject-in-sling-model
+java ../scripts/Bootstrap.java <workspace-root> --pattern inject-in-sling-model
 ```
 
 **Match criteria (what the detector flags):** a class annotated `@Model`

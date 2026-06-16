@@ -16,7 +16,7 @@ public final class OutdatedDependencies implements Detector {
     public String pattern() { return "outdated-dependencies"; }
     public boolean needsJava() { return false; }   // pom-only detector
 
-    // Allowlist — add "groupId:artifactId", or "groupId:prefix*" for a family. analyze.sh recompiles on edit.
+    // Allowlist — add "groupId:artifactId", or "groupId:prefix*" for a family. Bootstrap.java recompiles on edit.
     static final String[] ALLOWLIST = {
         "com.adobe.aem:aem-sdk-api",
         "org.mockito:*",

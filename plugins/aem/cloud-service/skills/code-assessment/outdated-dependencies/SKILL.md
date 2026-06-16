@@ -30,11 +30,11 @@ This pattern **locates** Maven coordinates; it does **not** declare a dependency
 
 ## Discovery
 
-Detection is performed by the analyzer ([`../scripts/analyze.sh`](../scripts/README.md)), run by
+Detection is performed by the analyzer ([`../scripts/Bootstrap.java`](../scripts/README.md)), run by
 the runbook:
 
 ```bash
-bash ../scripts/analyze.sh <workspace-root> --pattern outdated-dependencies
+java ../scripts/Bootstrap.java <workspace-root> --pattern outdated-dependencies
 ```
 
 **Match criteria (what the detector flags):** each `<dependency>` element carrying a `<version>`
@@ -49,11 +49,11 @@ in a file, the recipe's `ambiguous-locator` skip applies during planning.
 **Allowlist scope:** by default the detector is scoped to a curated allowlist of coordinates where
 upgrades are actionable in AEM Cloud Service projects (currently `com.adobe.aem:aem-sdk-api` and
 `org.mockito:*`). Non-allowlisted versioned dependencies are silently skipped. To list every
-versioned dependency regardless of allowlist, pass `--all` to `analyze.sh` — but **only** for an
+versioned dependency regardless of allowlist, pass `--all` to `Bootstrap.java` — but **only** for an
 explicit full audit ("all dependencies", "every library", "comprehensive"). For a normal "are my
 dependencies outdated?" ask, keep the default allowlist scope: it is the actionable answer, and
 `--all` adds platform deps (OSGi, JCR, servlet-api) that are not independently upgradeable. Adding a coordinate to
-the allowlist is a one-line change in `OutdatedDependencies.java`; `analyze.sh` recompiles
+the allowlist is a one-line change in `OutdatedDependencies.java`; `Bootstrap.java` recompiles
 automatically. Both exact `groupId:artifactId` and prefix-wildcard `groupId:prefix*` forms are
 supported.
 

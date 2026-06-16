@@ -63,7 +63,7 @@ Pass the named paths to the analyzer with `--files a.java,b.java` so detection r
 **discover:** Run the analyzer — it is the detection engine:
 
 ```bash
-bash <skill-dir>/scripts/analyze.sh <workspace-root> [--pattern <slug>]
+java <skill-dir>/scripts/Bootstrap.java <workspace-root> [--pattern <slug>]
 ```
 
 Pass `--pattern <slug>` for a single expert-skill run; omit it for a full multi-pattern audit.

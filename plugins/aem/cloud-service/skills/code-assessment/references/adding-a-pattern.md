@@ -75,7 +75,7 @@ public final class YourDetector implements Detector {
   add it once as a shared static helper rather than copying it.
 - **Register** it: add `new YourDetector()` to `Registry.all()` in `scripts/analyzer/Registry.java`.
 
-Verify in isolation: `bash scripts/analyze.sh scripts/test/fixtures/<slug> --pattern <slug>`.
+Verify in isolation: `java scripts/Bootstrap.java scripts/test/fixtures/<slug> --pattern <slug>`.
 
 ## Step 3 — fixtures + tests (`scripts/test/`)
 
@@ -144,5 +144,5 @@ keeps a growing catalog consistent.
 - **New file type** (not `*.java` / `pom.xml`) — also extend `collect()` and the detector signature;
   see [`../scripts/README.md`](../scripts/README.md). For Java/pom patterns no engine change is needed.
 - **One file per detector** — add one file under `analyzer/detectors/`; register it in
-  `Registry.all()`. `analyze.sh` recompiles the package automatically on source change (the
+  `Registry.all()`. `Bootstrap.java` recompiles the package automatically on source change (the
   compile cache is keyed on a hash of all `analyzer/` sources). No manual build step.

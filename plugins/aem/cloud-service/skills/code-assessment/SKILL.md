@@ -24,7 +24,7 @@ Single skill for detecting and fixing AEM CS code-quality issues, **entirely aga
 | **User-named** | the user names files or coordinates | user-supplied |
 | **Discover** | the user asks to scan, or names no files | user-supplied (per the pattern's resolution contract) |
 
-Discovery runs through the deterministic **analyzer** ([`scripts/analyze.sh`](scripts/README.md)):
+Discovery runs through the deterministic **analyzer** ([`scripts/Bootstrap.java`](scripts/README.md)):
 it parses the workspace once and runs the enabled detectors, emitting the shared findings shape.
 Patterns without an analyzer detector yet fall back to an LLM `scan` — see
 [`references/patterns.md`](references/patterns.md).
