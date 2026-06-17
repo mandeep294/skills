@@ -24,14 +24,14 @@ If the user has prototypes but no EDS scaffolding, stop and ask whether to boots
 
 ## Runtime bootstrap (vanilla aem-boilerplate targets)
 
-This skill's runtime is the **AuthorKit** runtime (`ak.js` page boot, `postlcp.js` static header/footer fragments, `body.session` font gating, `decorateSession()`, `tools/da/sanitise.js`). The conversion steps below assume those files exist. They are **NOT** in this skill folder — they live in the AuthorKit / author-kit repo (`github.com/ai-ecoverse/snowflake`, aka `aemsites/author-kit`).
+This skill's runtime is the **AuthorKit** runtime (`ak.js` page boot, `postlcp.js` static header/footer fragments, `body.session` font gating, `decorateSession()`). The conversion steps below assume those files exist. They are **NOT** in this skill folder — they live in the canonical AuthorKit repo (`github.com/aemsites/author-kit`). (The `sanitise.js` DA-write helper is bundled with this skill at `skills/deploy/scripts/sanitise.js`; it is not part of the ported runtime.)
 
 If the target project is a **vanilla `aem-boilerplate`** (it has `scripts/aem.js` + `scripts/scripts.js` and `header`/`footer` blocks, but no `ak.js`/`postlcp.js`), port the runtime before Step 1. Fetch the author-kit tarball and copy:
 
 **Port in (from author-kit):**
 ```
 scripts/ak.js scripts/scripts.js scripts/postlcp.js scripts/lazy.js scripts/utils/*
-tools/**                      # da/sanitise.js + da/da.js (+ sidekick, quick-edit, scheduler — keep so lazy.js/scripts.js imports resolve)
+tools/**                      # da/da.js (+ sidekick, quick-edit, scheduler — keep so lazy.js/scripts.js imports resolve). sanitise.js is bundled with this skill, not ported.
 deps/**                       # rum.js + lit (head.html loads deps/rum.js)
 head.html                     # AuthorKit head: loads ak.js + scripts.js + styles.css + deps/rum.js
 blocks/fragment blocks/section-metadata

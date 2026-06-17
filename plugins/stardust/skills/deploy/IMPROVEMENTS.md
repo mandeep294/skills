@@ -466,7 +466,7 @@ background fallback` convention as the default for image-less prototypes.
 ### 3. 🟠 Runtime is a prerequisite but not shipped/with the skill
 SKILL.md references `scripts/ak.js`, `postlcp.js`, `body.session`,
 `decorateSession()`, `fragments/` injection, `tools/da/sanitise.js` — all of
-which live in the **author-kit** repo (`ai-ecoverse/snowflake`), not in the
+which live in the **author-kit** repo (`aemsites/author-kit`), not in the
 skill. Porting onto a vanilla `aem-boilerplate` project required copying
 `scripts/{ak,lazy,postlcp,scripts}.js`, `scripts/utils/*`, `tools/*`, `deps/*`,
 `head.html`, `blocks/{fragment,section-metadata}`, and **removing** boilerplate
