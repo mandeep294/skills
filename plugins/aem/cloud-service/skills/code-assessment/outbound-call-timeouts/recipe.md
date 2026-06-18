@@ -224,8 +224,11 @@ import order. Concretely:
    construction, at the construction's indentation.
 2. Replace only the construction expression that the finding points at — leave the assignment target,
    the rest of the method, and unrelated statements untouched.
-3. Add imports alphabetically within the file's existing grouping convention; remove a factory import
-   only when it has zero remaining uses.
+3. Edit imports **one line at a time** — add each new `import …;` as its own line and remove an unused
+   factory import by its exact full line. Do **not** anchor on a multi-line import block: files
+   interleave unrelated imports (e.g. `Logger`), so a block anchor is not unique and the edit fails.
+   Placement follows the file's existing ordering convention best-effort, but correctness never depends
+   on imports being grouped or contiguous.
 
 If the construction does not cleanly match one of the per-library templates (custom wrapper,
 unexpected builder shape), trigger the `ambiguous-construction` skip rather than guessing.
