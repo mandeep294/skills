@@ -10,29 +10,10 @@
   "allowCrossMarketplaceDependenciesOn": ["impeccable"],
   "plugins": [
     {
-      "name": "adobe-for-creativity",
-      "source": "./plugins/creative-cloud/adobe-for-creativity",
-      "description": "Brings together Adobe Creative Cloud tools for images, vectors, design, and video. Edit multiple assets at once, adapt for different platforms, and complete multi-step creative workflows for polished results.",
-      "version": "1.0.2",
-      "category": "creative-cloud",
-      "keywords": [
-        "adobe",
-        "creative-cloud",
-        "image-editing",
-        "design"
-      ],
-      "author": {
-        "name": "Adobe"
-      },
-      "homepage": "https://github.com/adobe/skills",
-      "repository": "https://github.com/adobe/skills",
-      "license": "Apache-2.0"
-    },
-    {
       "name": "stardust",
       "source": "./plugins/stardust",
       "description": "Redesign an existing website to make it better. Higher-level guided flow on top of impeccable.",
-      "version": "0.6.0",
+      "version": "0.12.0",
       "category": "design",
       "keywords": [
         "design",
@@ -76,7 +57,7 @@
     {
       "name": "aem-eds-content-ops",
       "source": "./plugins/aem/edge-delivery-services-content-ops",
-      "description": "Content operations skills for AEM Edge Delivery Services: page auditing, AI search optimization (GEO), WCAG accessibility, bulk metadata, and content diffing"
+      "description": "Content operations skills for AEM Edge Delivery Services: page auditing, SEO optimization, AI search (GEO), WCAG accessibility, bulk metadata, structured data, sitemap validation, and content diffing"
     },
     {
       "name": "adobe-analytics",
