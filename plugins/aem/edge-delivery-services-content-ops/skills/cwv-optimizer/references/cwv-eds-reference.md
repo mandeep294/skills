@@ -8,7 +8,7 @@ EDS achieves near-100 Lighthouse scores out of the box through strict architectu
 
 **LCP** — Almost always an image issue. The 100KB budget means total eager-phase transfer must stay under 100KB. Check: hero image size, number of eager blocks, font preloading, third-party scripts in the eager phase.
 
-**CLS** — Almost always an image dimensions or font swap issue. `createOptimizedPicture()` historically omitted `width`/`height` attributes (aem-lib issue #201). Late consent banners and `font-display: swap` without `size-adjust` are the other common sources.
+**CLS** — Almost always an image dimensions or font swap issue. `createOptimizedPicture()` does not set `width`/`height` attributes on the images it generates. Late consent banners and `font-display: swap` without `size-adjust` are the other common sources.
 
 **INP** — Almost always block JavaScript. Carousels, accordions, tabs, and mega-menus that do heavy DOM manipulation on interaction cause long tasks. Forced reflows (read layout then write DOM) are the most common code-level cause.
 

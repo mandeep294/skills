@@ -73,13 +73,17 @@ Inventory every eager-phase resource and measure actual transfer sizes. Build th
 Use the RUM API to pull real-user LCP data for the page:
 
 ```javascript
-// Fetch RUM LCP data for a specific page path
+// Fetch RUM bundles for a domain. The Bundler API is path-based
+// (/bundles/{domain}/{year}/{month}/{day}); the domain key is the ?domainkey=
+// query parameter, not an Authorization header.
 const resp = await fetch(
-  'https://rum.hlx.page/bundles?domain=example.com&url=/my-page&metric=lcp&interval=7',
-  { headers: { Authorization: `Bearer ${RUM_API_KEY}` } }
+  `https://rum.hlx.page/bundles/example.com/2026/06/28?domainkey=${RUM_DOMAIN_KEY}`,
 );
-const { bundles } = await resp.json();
-const lcpValues = bundles.flatMap(b => b.events.filter(e => e.name === 'lcp').map(e => e.value));
+const { rumBundles } = await resp.json();
+// CWV readings live in each bundle's events array as cwv-lcp / cwv-cls / cwv-inp checkpoints.
+const lcpValues = rumBundles.flatMap(
+  (b) => b.events.filter((e) => e.checkpoint === 'cwv-lcp').map((e) => e.value),
+);
 const p75 = lcpValues.sort((a, b) => a - b)[Math.floor(lcpValues.length * 0.75)];
 console.log(`p75 LCP: ${p75}ms`);
 ```
@@ -106,7 +110,7 @@ Check whether images have explicit `width` and `height`:
 curl -s "https://<domain>/<path>" | grep -oP '<img[^>]*>' | head -10
 ```
 
-Images without dimensions cause CLS. The `createOptimizedPicture()` function in older `aem.js` versions omitted these (aem-lib issue #201). Fix by updating `aem-lib` or adding attributes in the block's `decorate()` function.
+Images without dimensions cause CLS. The `createOptimizedPicture()` function in `aem.js` does not set `width`/`height` attributes on the images it generates. Fix by adding the attributes in the block's `decorate()` function.
 
 Check image formats and sizes via headers. Targets: hero/LCP image under 40KB (WebP or AVIF), below-fold under 80KB, icons under 5KB (prefer SVG).
 
