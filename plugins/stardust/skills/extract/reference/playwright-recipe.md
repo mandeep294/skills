@@ -179,7 +179,10 @@ viewport. With default extract behavior the banner:
 Pre-flight a **consent dismissal** before the per-page loop.
 One dismissal in a fresh `BrowserContext` typically persists
 the cookie state across every subsequent page in the same
-context, so the cost is one extra navigation per crawl.
+context — but **not across contexts**: with concurrent capture
+(`extract/SKILL.md` § Concurrency) each worker context re-runs
+the dismissal on its first page, or clones the probe context's
+`storageState`. Cost: one extra navigation per context.
 
 ### Dismissal procedure
 
@@ -457,6 +460,14 @@ For each page, capture:
    data — without them, every body region under a heading falls back
    to placeholder-with-signature even when the source page had real
    prose to reuse.
+7-ter. **Code blocks (`codeBlocks[]`, page-level)** — every **visible**
+   `<pre>`'s `innerText` verbatim, in document order (schema:
+   `current-state-schema.md`). Prose capture skips code blocks, and on
+   developer-tool sites the install commands are the most load-bearing
+   content on the page — without this field they never reach
+   `pages/<slug>.json` and downstream phases fabricate or omit them
+   (stardust-style e2e finding). Preserve line structure; emit `[]`
+   when the page has none.
 8. **CTA inventory** — every `button`, `[role="button"]`, and `<a>`
    that visually presents as a button (background-color != transparent,
    `border-radius > 2px`, padding > 4 px). Capture: label, href if any,

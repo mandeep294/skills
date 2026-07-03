@@ -57,17 +57,42 @@ inline, or run an impeccable command) and re-invoke migrate.
 
 ## Setup
 
+0. **Playwright re-probe (mandatory first step).** `--no-save` playwright
+   installs from earlier phases are pruned by any later real `npm i`
+   (extract SKILL.md § Setup → `--no-save` installs are ephemeral). Before
+   any rendering step, probe
+   `node -e "import('playwright').then(()=>process.exit(0))"` from the
+   project root and re-install (`npm i -D playwright --no-save
+   --legacy-peer-deps`) on failure.
 1. Run the master skill's setup
    (`skills/stardust/SKILL.md` § Setup).
 2. Verify `stardust/state.json` exists with at least one
    `directed` page.
 3. Verify project-root `DESIGN.md` and `DESIGN.json` exist with
-   `DESIGN.json.extensions.canon` populated. If canon is empty,
-   recommend `$stardust prepare-migration` and stop.
+   `DESIGN.json.extensions.canon` populated.
 4. Verify `stardust/canon/` exists with at least
-   `header.html`, `footer.html`, `canon.css`. Otherwise prep
-   hasn't completed; recommend `$stardust prepare-migration`
-   and stop.
+   `header.html`, `footer.html`, `canon.css`.
+
+   **Canon auto-bootstrap (when steps 3–4 find no canon).** The
+   documented `prototype → migrate → deploy` happy path does not
+   run `prepare-migration`, so a first migrate legitimately arrives
+   with no canon (observed on 4 of 6 e2e sites, where every run had
+   to derive canon by hand to proceed — this is the fix). When
+   canon is absent **and** at least one `approved` prototype exists,
+   do not stop: run the canon write-back inline from the first
+   approved prototype (the canon-author, default `home`) per
+   `../prototype/reference/canon-extraction.md` § Five-step
+   procedure — extract `header.html` / `footer.html` / `canon.css`
+   to `stardust/canon/`, pin tokens + compositional moves to
+   `DESIGN.json.extensions.canon`, and record
+   `canon.source: "auto-bootstrap: <slug>"`. This is exactly what
+   `prototype --prep` does on first approval; migrate performs it
+   on demand so the core pipeline never dead-ends. Only stop and
+   recommend `$stardust prepare-migration` when canon is absent
+   **and** no approved prototype exists (there is nothing to derive
+   canon from). Under `state.json.handsOff` the bootstrap is
+   automatic and logged; interactively, surface it as a one-line
+   notice before proceeding.
 5. Verify `stardust/direction.md` has an active (not pending)
    direction.
 6. Read `state.json.pages[]` and partition into:
@@ -194,6 +219,14 @@ For each page in scope, follow
   repaired (missing `?`-delimiter, wrong host) or omitted, never
   shipped as `about:error`. `rollout` re-runs the authoritative
   network resolve at delivery (`media-reconcile.mjs`).
+- **Cinematic sibling (when `<slug>-cinematic.html` exists).**
+  Migrate consumes the STATIC prototype only — the cinematic layer
+  is never merged. Copy the motion assets (`lenis.min.js`,
+  `lenis.min.css`) from `stardust/prototypes/` to
+  `stardust/migrated/assets/motion/` (idempotent) for downstream
+  consumers (deploy/rollout decide whether to wire them), and
+  record `cinematic-variant-not-consumed` in the page's
+  `_meta.json#migrationDecisions[]`.
 - **Write** the migrated `index.html` and the `_meta.json`
   sidecar in the same directory. Provenance block as first
   child of `<head>`. Record `assetsBundled` (count of unique
@@ -392,8 +425,11 @@ work, they just mark it as out-of-step.
 
 - **No directed pages.** Recommend `$stardust direct` (or
   `$stardust extract` if no extracted state).
-- **No DESIGN.md, DESIGN.json, or canon.** Recommend
-  `$stardust prepare-migration`.
+- **No DESIGN.md or DESIGN.json.** Recommend `$stardust direct`.
+- **No canon, but an approved prototype exists.** Do NOT stop —
+  auto-bootstrap canon from the canon-author inline (Setup step 4).
+- **No canon and no approved prototype.** Recommend
+  `$stardust prepare-migration` (or approve a prototype first).
 - **Pending direction.** Refuse; user must resolve direction
   first.
 - **Validation failure on a single page.** Skip that page,
