@@ -27,7 +27,7 @@ module.exports = {
       assets: [{ path: "*.skill", label: "Skill package" }]
     }],
     ["@semantic-release/exec", {
-      publishCmd: "if [ -f tile.json ]; then tessl skill publish . --workspace adobe; fi"
+      publishCmd: "if [ -f .tessl-plugin/plugin.json ]; then tessl plugin publish . --workspace adobe; fi"
     }],
     ["@semantic-release/git", {
       assets: ["CHANGELOG.md", "SKILL.md"],
