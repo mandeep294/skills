@@ -1,6 +1,6 @@
 ---
 name: block-collection-and-party
-description: "Use this when you are starting AEM Edge Delivery Services development and want an existing reference to build from, such as a block, build tool, code snippet, integration pattern, or plugin. Covers the Block Collection and Block Party repositories and how to find a suitable starting point."
+description: "Use this when you are starting AEM Edge Delivery Services (EDS, Franklin, Helix) development and want an existing reference to build from, such as a block, build tool, code snippet, integration pattern, or plugin. Searches the Block Collection and Block Party repositories, matches candidates against the need, and returns a suitable starting point to clone or adapt."
 license: Apache-2.0
 metadata:
   version: "1.2.0"
