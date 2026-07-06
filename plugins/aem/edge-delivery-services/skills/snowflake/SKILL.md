@@ -1,6 +1,6 @@
 ---
 name: snowflake
-description: Static-to-EDS conversion that preserves the original design while making content authorable in Document Authoring. Two modes — page-level (overlay template with slot markers) and block-level (each section becomes an independent EDS block). Use when converting an AI-generated static HTML page (Stardust, Mobirise, Relume, Lovable, v0, Figma-derived hand-coded, etc.) into an Edge Delivery Services page. Triggers on "convert this page to EDS", "static-to-EDS overlay", "convert to EDS blocks", "next experimentation", "next run", "start run", or when a user provides a source URL and asks to make it editable in DA while keeping the original design intact. Do NOT use for canonical EDS block-rewrite migrations — that's the page-import skill.
+description: "Use this when converting an AI-generated static HTML page (Stardust, Mobirise, Relume, Lovable, v0, Figma-derived, etc.) into an Edge Delivery Services page while preserving the original design and making content authorable in Document Authoring — triggers include \"convert this page to EDS\", \"static-to-EDS overlay\", \"convert to EDS blocks\", \"next experimentation\", \"next run\", \"start run\", or providing a source URL to make editable in DA. Covers two modes — page-level (overlay template with slot markers) and block-level (each section becomes an independent EDS block). For canonical EDS block-rewrite migrations use page-import instead."
 license: Apache-2.0
 metadata:
   version: "1.2.0"
