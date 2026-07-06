@@ -1,6 +1,6 @@
 ---
 name: block-collection-and-party
-description: The Block Collection and Block Party are repositories for existing AEM blocks, build tools, code snippets, integration patterns, plugins, and more. Use this skill anytime you are developing something and want to find a reference to use as a starting point.
+description: "Use this when you are starting AEM Edge Delivery Services development and want an existing reference to build from, such as a block, build tool, code snippet, integration pattern, or plugin. Covers the Block Collection and Block Party repositories and how to find a suitable starting point."
 license: Apache-2.0
 metadata:
   version: "1.2.0"
