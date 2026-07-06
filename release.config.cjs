@@ -26,9 +26,6 @@ module.exports = {
     ["@semantic-release/github", {
       assets: [{ path: "*.skill", label: "Skill package" }]
     }],
-    ["@semantic-release/exec", {
-      publishCmd: "if [ -f .tessl-plugin/plugin.json ]; then tessl plugin publish . --workspace adobe; fi"
-    }],
     ["@semantic-release/git", {
       assets: ["CHANGELOG.md", "SKILL.md"],
       message: "chore(release): " + name + "-v${nextRelease.version} [skip ci]"
