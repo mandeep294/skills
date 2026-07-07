@@ -37,10 +37,16 @@ extract  →  direct  →  prototype  →  migrate
    with declared fidelity tiers. Per-page state makes it incremental and
    resumable.
 
-Two more core entry points sit alongside the pipeline: **uplift** (one-shot
-brand-faithful presales redesign — URL in, three differentiated variants out)
-and **audit** (design + SEO + LLM-visibility audit of any site, producing a
-scored HTML report).
+Four more core entry points sit alongside the pipeline: **uplift** (one-shot
+brand-faithful presales redesign — URL in, three differentiated variants out),
+**audit** (design + SEO + LLM-visibility audit of any site, producing a
+scored HTML report), **replica** (same-design migration — recreate the site's
+key pages near pixel-perfect as clean re-authored HTML, verified by a measured
+source-fidelity gate, the only permitted design changes being an explicit
+inconsistency register; the design stays, the platform changes), and
+**reskin** (byte-faithful content from one site re-laid-out onto a
+separately-defined donor design system — another live site or local
+prototypes — with dual content/design-adoption gates).
 
 **EDS delivery** — optional second half that ships the migrated site to AEM
 Edge Delivery Services via Document Authoring: **deploy** (one page →
@@ -79,11 +85,12 @@ otherwise with a clear install hint.
 
 ## Status
 
-`v0.14.3` — Fable 5 refactor: reference-grounded direction, the `audit`
-skill, cross-site same-brand extraction, hands-off production mode, vision
-gates, parallelism contracts, and delivery hardening. See
-[CHANGELOG.md](CHANGELOG.md) for the full breakdown; prior versions live in
-git history.
+`v0.16.0` — two new entry points: `replica` (same-design migration with a
+measured source-fidelity gate) and `reskin` (byte-faithful content onto a
+donor design system), both field-tested and hardened, plus the shared
+live-measurement module (`diff/scripts/live-session.mjs`) and diff-probe
+flags. See [CHANGELOG.md](CHANGELOG.md) for the full breakdown; prior
+versions live in git history.
 
 ## License
 

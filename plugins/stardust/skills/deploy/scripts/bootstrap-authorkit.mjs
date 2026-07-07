@@ -97,7 +97,35 @@ async function portIn(srcDir, target) {
   for (const rel of [...PORT_FILES, ...PORT_DIRS]) {
     const from = path.join(srcDir, rel);
     if (!existsSync(from)) { missing.push(rel); continue; }
-    await cp(from, path.join(target, rel), { recursive: true, force: true });
+    const to = path.join(target, rel);
+    // head.html special case: deploy Step 3 § Favicon adds exactly one
+    // `<link rel="icon" href="/favicon.<ext>">` tag for non-.ico formats,
+    // and re-running bootstrap (the documented recovery path) would blind-
+    // overwrite it with the stock head.html — nothing downstream re-verifies
+    // head.html. Preserve any existing icon link TAG(S) — matched as complete
+    // <link ...> tags over the whole file (a tag may span lines; a line-based
+    // filter re-injects an unterminated fragment), rel covering icon /
+    // shortcut icon / apple-touch-icon — and re-inject them after the copy.
+    // Only complete matched tags are ever injected (idempotent: identical
+    // trimmed tags are not duplicated).
+    let faviconTags = [];
+    if (rel === 'head.html' && existsSync(to)) {
+      faviconTags = ((await readFile(to, 'utf8')).match(/<link\b[^>]*>/gi) || [])
+        .filter((t) => /\brel=["'][^"']*icon[^"']*["']/i.test(t))
+        .map((t) => t.trim());
+    }
+    await cp(from, to, { recursive: true, force: true });
+    if (faviconTags.length) {
+      let head = await readFile(to, 'utf8');
+      const have = new Set((head.match(/<link\b[^>]*>/gi) || []).map((t) => t.trim()));
+      const inject = faviconTags.filter((t) => !have.has(t));
+      if (inject.length) {
+        if (head.length && !head.endsWith('\n')) head += '\n';
+        head += `${inject.join('\n')}\n`;
+        await writeFile(to, head);
+        log(`[bootstrap] head.html: preserved favicon link across the overwrite (${inject.join(' | ')})`);
+      }
+    }
     copied.push(rel);
   }
   return { copied, missing };

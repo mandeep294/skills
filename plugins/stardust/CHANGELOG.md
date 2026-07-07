@@ -4,6 +4,109 @@ This file starts at 0.14.0. Prior versions (0.3.0 – 0.13.1) are documented in
 git history only (plus the branch-scoped notes in
 `CHANGELOG-redesign-adobecom.md` and `CHANGELOG-delivery-media-fidelity.md`).
 
+## 0.16.0 — two new entry points: replica (same-design migration) and reskin (content × donor design)
+
+Round-1 outcome of the three-new-use-cases exploration (research, candidate
+designs, and validation evidence in `notes/new-use-cases/`). Both flows were
+validated on real pages before codification — replica converged aesop.com to
+a 1.31% pixel diff with zero structural findings in 3 measured iterations;
+reskin carried hirslanden.ch content byte-identically (2281/2281 chars,
+47/47 slots, 13/13 metadata) onto stripe.com's token system with 91% of
+slots mapped to named donor modules. No existing skill was modified (round-2
+synergy candidates are listed in `notes/new-use-cases/ROUND-1-REPORT.md`).
+
+- **`stardust:replica`** (new): same-design migration to AEM EDS. extract
+  `--prep` unchanged → mechanical preserve-direction (current-state spec
+  promoted verbatim as target; deltas only via the inconsistency register) →
+  clean re-authored archetype recreation (values lifted from the source
+  site's own CSS, never DOM copies) → measured source-fidelity gate per
+  breakpoint (diff's two probes `--profile generic` + new
+  `stitch-shot.mjs`/`pixel-compare.mjs` stitched pixel probe with per-band
+  breakdown, ≤3 iterations) → migrate sibling tier / deploy
+  (template-slotted bias) / rollout unchanged.
+- **`stardust:reskin`** (new): byte-faithful content onto a donor design
+  system (live URL via extract `--design-source`, or local prototypes;
+  Figma donor contract-defined, not implemented). Content-model capture with
+  scope declaration + executable normalization ledger → mapping brief
+  (≥80% slots mapped to named donor modules, no silent improvisation) →
+  programmatic render from the model (never retyped) → dual gates: content
+  (vendored `dom-equality.mjs`, Apache-2.0 attribution, structure
+  informational + `slot-coverage.mjs` incl. metadata) and design-adoption
+  (`donor-probe.mjs` token assertions; selector-missing = FAIL).
+- Both skills were smoke-tested for generalization on fresh sites before
+  shipping (replica: hay.dk, desktop converged to 1.06%; reskin:
+  ethz.ch × posthog.com, 4883/4883 text bytes, 101/101 slot checks) and
+  hardened from the findings: replica gained pointer-park capture hygiene,
+  the fixed/sticky-chrome × stitched-capture procedure, per-breakpoint CSS
+  lifting, and the full four-patch adaptation set for the diff probes
+  (upstreaming them as diff flags is the recorded round-2 candidate);
+  reskin gained the document-ordered render stream in the content model
+  (`ordered` + tiling verification), root-kind slot classification, a
+  shared image-visibility predicate across capture and gate, the
+  scope-granularity smell check, and the bounded donor-sampling recipe.
+  Smoke evidence: `/Users/paolo/stardust/smoke-{replica,reskin}/SMOKE-REPORT.md`.
+- New evals: `replica-source-fidelity/`, `reskin-content-fidelity/`.
+
+### Field-test hardening (5+5 home pages, findings ledger in the 2026-07 field report)
+
+A 10-site field test (replica: fritzhansen, rimowa, carhartt-wip, polestar,
+maisonkitsune; reskin: kew×linear PASS, moma×intercom PASS, redcross×vercel)
+produced an 18-finding ledger; all skill-wrong findings are folded:
+
+- **Shared live-measurement hardening (F-G, F-R1, rimowa-1; HIGH).** New
+  `diff/scripts/live-session.mjs` — the one home for hitting live sites to
+  *measure* them, as robust as extract's capture engine: real-Chrome UA
+  **plus the standard request headers** (Akamai fingerprints on the absence
+  of `Accept`/`Accept-Language`/`sec-ch-ua`, so UA alone still 403s —
+  reproduced on redcross.org, fixed to HTTP 200; the same header set
+  un-blocked rimowa's gate headlessly), challenge detection that **fails
+  loud** (exit 3, never silently measured as the source), headed-stealth
+  escalation, and two-class overlay dismissal (consent + timed marketing
+  modals, the carhartt `#wps_popup` case — CH-1). Consumed by diff's two
+  probes, replica's stitch-shot, and reskin's three live-hitting scripts.
+- **diff flags replace replica's 10 hand-edits (F-B).** `--ua`,
+  `--wait-until`, `--dismiss`, `--headed`, `--locale` on both probes and
+  visual-diff `--main`, backward-compatible for local/deploy use;
+  `source-fidelity-gate.md` § Script adaptations rewritten — a hand-edited
+  project copy is now a defect.
+- **replica:** bounded `--single` entry gets a satisfiable promotion
+  contract (`bounded-single` synthesis branch — rimowa-3); `--main body`
+  banned with the 103-false-🔴 reproduction (F-C); hit-minimization +
+  media-density iteration budget (rimowa-2, CH-2); mobile-@media-first and
+  role-parity recreation guidance (CH-3/FH-2); locale pinning for capture
+  determinism.
+- **reskin:** ordered stream is now `innerText`-consistent by construction
+  (F-R2 — kew's a11y ghost labels eliminated at the source; 8/8
+  `orderedVerified` vs 5 false in the field) with a sanctioned documented
+  fallback; `formControl` stream nodes carry select/option/input text
+  verbatim (F-R3 — redcross course form now fully reconstructable, 13/13
+  verified); slot-coverage gains a paint assertion so an origin-locked CDN
+  can't hide behind a passing URL-string gate (F-R4, kew's 19 unpainted
+  images); zero-output scope errors now guide discovery (F-D); first-match
+  scope semantics and bounded-donor token sourcing documented (F-R5, F-R6).
+- Manifest version aligned (F-A).
+- **PR-review P1 fixes** (multi-agent review of PR #238): donor-probe expands
+  CSS box shorthands canonically (3-value `[t,r,b,r]`, not cyclic — a
+  pixel-perfect render no longer false-fails the design gate); stitch-shot
+  fails loud on scroll-stall (inner-scroller/scroll-jacked pages can no
+  longer produce silent black-row captures); the diff probes regain their
+  advisory exit contract for HTTP errors (`gotoLive httpError:'measure'` —
+  a 404 build side reports flags at exit 0 again; challenges still exit 3;
+  reskin's byte gate keeps fail-loud); `defaultWaitUntil` centralized in
+  live-session with a three-tier rule (localhost and `*.aem.page/.aem.live/
+  .hlx.page/.hlx.live` → networkidle, other live → domcontentloaded) so
+  deploy Step 10 never measures a half-decorated EDS page.
+- **PR-review P2/P3 fixes**: the challenge solve-window runs headed-only —
+  a challenged headless run now costs exactly 1 hit (was 4, the entire
+  recorded Akamai block budget) before exit 3; slot-coverage routes live
+  `--rendered` targets through live-session like its siblings (challenge →
+  exit 3, no more swallowed navigation errors); case-insensitive stream
+  matching no longer reuses indexes across case-folded strings (Turkish İ
+  class — corrupted stream bytes fixed at the source); bootstrap re-runs
+  preserve the favicon `<link>` when overwriting head.html (idempotent
+  re-injection); typo'd `--flags` now error loudly in dom-equality /
+  donor-probe / slot-coverage; the QA harness derives its favicon link from
+  the shipped `favicon.<ext>` (or keeps the request-free `data:,` no-op).
 ## 0.15.0 — deploy accuracy: close the ENCODE/DECODE round-trip at authoring time (#93–#95)
 
 The six-site e2e campaign showed `stardust:diff`'s structural probe catching

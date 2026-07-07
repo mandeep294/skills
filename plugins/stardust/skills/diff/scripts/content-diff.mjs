@@ -31,11 +31,34 @@
  *
  * Usage:
  *   node skills/diff/scripts/content-diff.mjs <prototypeURL> <edsURL> [options]
- *     --main <selector>   content root to compare        (default "main")
- *     --width <px>        viewport width                 (default 1280)
- *     --json              also print the two raw inventories
+ *     --main <selector>     content root to compare        (default "main")
+ *     --width <px>          viewport width                 (default 1280)
+ *     --json                also print the two raw inventories
+ *     --ua <string>         user agent                     (default: real-Chrome desktop UA)
+ *     --wait-until <state>  goto wait state override. Default rule (three tiers,
+ *                           decided per URL side by live-session's defaultWaitUntil):
+ *                           localhost/127.0.0.1 → 'networkidle'; EDS build/preview
+ *                           origins (*.aem.page, *.aem.live, *.hlx.page, *.hlx.live)
+ *                           → 'networkidle' (they decorate async — measuring at
+ *                           domcontentloaded reads the pre-decoration DOM); all
+ *                           other live http(s) → 'domcontentloaded' (analytics
+ *                           beacons never reach networkidle).
+ *     --dismiss [sel,...]   dismiss overlays on both sides via live-session
+ *                           (consent + timed marketing modals), plus these extra
+ *                           site-specific selectors (optional)
+ *     --headed              escalation: headed stealth real Chrome (bot-managed sites)
+ *     --locale <tag>        pin Accept-Language + context locale (geo-redirect determinism)
  *
- * Exit codes: 0 ran (flags are advisory, they do NOT fail the run), 1 error.
+ * Every context gets the real-Chrome UA + the standard request headers via
+ * live-session.mjs (UA alone still 403s on Akamai — F-R1). A bot-management
+ * challenge on either navigation FAILS LOUD (exit 3) — a challenge page must
+ * never be measured as the source. A plain HTTP error (e.g. a 404 build side
+ * before preview propagation) is NOT fatal: it is measured with a loud
+ * warning and the flags reflect it — the advisory contract Step 10 relies on.
+ *
+ * Exit codes: 0 ran (flags are advisory, they do NOT fail the run — an
+ * HTTP-error side is measured + flagged, not fatal), 1 error, 3 bot
+ * challenge/blocked live side (BotChallengeError — escalate with --headed).
  */
 
 /* eslint-disable import/no-extraneous-dependencies, import/extensions, no-await-in-loop, no-restricted-syntax, brace-style, object-curly-newline, max-len, no-plusplus, newline-per-chained-call, no-continue, no-multi-spaces */
@@ -43,25 +66,71 @@
 import { chromium } from 'playwright';
 import { resolveProfile } from './diff-profiles.mjs';
 import { inventory, diffInventories, summarise } from './content-inventory.mjs';
+import { REAL_CHROME_UA, isLiveHttpUrl, defaultWaitUntil, launchStealthHeaded, newLiveContext, gotoLive, dismissOverlays } from './live-session.mjs';
+
+const USAGE = `usage: node skills/diff/scripts/content-diff.mjs <sourceURL> <buildURL> [options]
+  --profile eds|generic  stack profile (default eds)
+  --main <sel>           content root (default from profile)
+  --width <px>           viewport width (default 1280)
+  --json                 also print the two raw inventories
+  --ua <string>          user agent (default: real-Chrome desktop UA)
+  --wait-until <state>   goto wait state. Default (per URL side, three tiers):
+                         networkidle for localhost/127.0.0.1; networkidle for EDS
+                         build/preview origins (*.aem.page, *.aem.live, *.hlx.page,
+                         *.hlx.live — they decorate async); domcontentloaded for all
+                         other live http(s) (never reach networkidle).
+  --dismiss [sel,...]    dismiss overlays (consent + timed marketing modals) on both
+                         sides; optional comma-separated extra selectors
+  --headed               headed stealth real Chrome (escalation for bot-managed sites)
+  --locale <tag>         pin Accept-Language + locale (e.g. en-GB) for geo determinism
+exit codes: 0 ran (flags advisory; an HTTP-error side, e.g. a 404 build pre-propagation,
+            is measured + flagged with a warning, not fatal), 1 error,
+            3 bot challenge (live side blocked — fail loud)
+`;
 
 function parseArgs(argv) {
   const [, , proto, eds, ...rest] = argv;
-  const opts = { main: null, width: 1280, json: false, profile: 'eds' };
+  if (rest.includes('--help') || proto === '--help' || proto === '-h') { process.stdout.write(USAGE); process.exit(0); }
+  const opts = { main: null, width: 1280, json: false, profile: 'eds', ua: REAL_CHROME_UA, waitUntil: null, dismiss: null, headed: false, locale: null };
   for (let i = 0; i < rest.length; i += 1) {
     const a = rest[i];
     if (a === '--main') { opts.main = rest[i += 1]; }
     else if (a === '--width') { opts.width = Number(rest[i += 1]); }
     else if (a === '--json') { opts.json = true; }
     else if (a === '--profile') { opts.profile = rest[i += 1]; }
+    else if (a === '--ua') { opts.ua = rest[i += 1]; }
+    else if (a === '--wait-until') { opts.waitUntil = rest[i += 1]; }
+    else if (a === '--dismiss') {
+      // optional value: bare --dismiss enables overlay dismissal with no extras
+      const next = rest[i + 1];
+      opts.dismiss = (next && !next.startsWith('--')) ? rest[i += 1].split(',').map((s) => s.trim()).filter(Boolean) : [];
+    }
+    else if (a === '--headed') { opts.headed = true; }
+    else if (a === '--locale') { opts.locale = rest[i += 1]; }
   }
   return { proto, eds, opts };
 }
 
 async function grab(browser, url, opts, prof) {
-  const ctx = await browser.newContext({ viewport: { width: opts.width, height: 1000 }, reducedMotion: 'reduce' });
+  // UA + standard headers on EVERY context (live-session; F-R1 — UA alone
+  // still 403s on Akamai), webdriver spoof included for the --headed tier.
+  const ctx = await newLiveContext(browser, {
+    ua: opts.ua, locale: opts.locale,
+    viewport: { width: opts.width, height: 1000 },
+    reducedMotion: 'reduce',
+  });
   const page = await ctx.newPage();
-  await page.goto(url, { waitUntil: 'networkidle' });
+  // challenge detection on every navigation — a blocked live side throws
+  // BotChallengeError (exit 3), it is never measured as the source. A plain
+  // HTTP error side is MEASURED (advisory contract): a 404 build is normal on
+  // aem.page before preview propagation — the flags carry the signal, exit 0.
+  // solveWindow only under --headed: headless clearance never lands, and the
+  // solve loop would spend the Akamai block budget (1 hit vs up to 4).
+  await gotoLive(page, url, { waitUntil: opts.waitUntil || defaultWaitUntil(url), timeoutMs: 60000, settleMs: 0, httpError: 'measure', solveWindow: opts.headed });
   await page.waitForTimeout(1500);
+  // late-modal poll window only on live targets — local prototypes' overlays
+  // are not timed third-party scripts, they render immediately.
+  if (opts.dismiss) await dismissOverlays(page, { extra: opts.dismiss, lateWindowMs: isLiveHttpUrl(url) ? 6000 : 0 });
   // scroll through to trigger reveal-on-scroll / lazy nodes, then return to top
   await page.evaluate(async () => {
     for (let y = 0; y < document.body.scrollHeight; y += 600) { window.scrollTo(0, y); await new Promise((r) => { setTimeout(r, 40); }); }
@@ -76,11 +145,11 @@ async function grab(browser, url, opts, prof) {
 async function main() {
   const { proto, eds, opts } = parseArgs(process.argv);
   if (!proto || !eds) {
-    process.stderr.write('usage: node skills/diff/scripts/content-diff.mjs <sourceURL> <buildURL> [--profile eds|generic] [--main sel] [--width px] [--json]\n');
+    process.stderr.write(USAGE);
     process.exit(1);
   }
   const prof = resolveProfile(opts.profile);
-  const browser = await chromium.launch();
+  const browser = opts.headed ? await launchStealthHeaded(chromium) : await chromium.launch();
   let srcInv; let tgtInv;
   try {
     srcInv = await grab(browser, proto, opts, prof);
@@ -110,4 +179,6 @@ async function main() {
   }
 }
 
-main().catch((e) => { process.stderr.write(`content-diff error: ${e.message}\n`); process.exit(1); });
+// exit 3 = bot challenge on a live side (distinct from generic errors, so a
+// gate runner can tell "blocked — escalate with --headed" from "probe broke").
+main().catch((e) => { process.stderr.write(`content-diff error: ${e.message}\n`); process.exit(e.name === 'BotChallengeError' ? 3 : 1); });
